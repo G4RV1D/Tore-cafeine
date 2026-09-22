@@ -22,6 +22,7 @@
   .pill.pending { background: #4b3d1a; color: #e6c65c; }
   .pill.approved { background: #1f3d24; color: #7fd18a; }
   .pill.denied { background: #4b1a1a; color: #e67c7c; }
+  .pill.revoked { background: #3a2c22; color: #b39a72; }
   .code { font-family: monospace; background: #100c09; padding: 3px 8px; border-radius: 4px; }
   .row-actions { display: flex; gap: 8px; align-items: center; }
   select { background: #100c09; color: #ecdfc0; border: 1px solid #3a2c22; border-radius: 4px; padding: 6px; }
@@ -107,16 +108,19 @@
         ? `${r.role} — <span class="code">${r.code}</span>`
         : "—";
 
-      const actionCell = r.status === "pending"
-        ? `<div class="row-actions">
+      let actionCell = "";
+      if (r.status === "pending") {
+        actionCell = `<div class="row-actions">
              <select data-id="${r.id}" class="role-select">
                <option value="viewer">Lecteur</option>
                <option value="admin">Admin</option>
              </select>
              <button data-approve="${r.id}">Approuver</button>
              <button class="secondary" data-deny="${r.id}">Refuser</button>
-           </div>`
-        : "";
+           </div>`;
+      } else if (r.status === "approved") {
+        actionCell = `<button class="secondary" data-revoke="${r.id}">Révoquer l'accès</button>`;
+      }
 
       tr.innerHTML = `
         <td>${escapeHtml(r.name)}</td>
@@ -135,6 +139,9 @@
     body.querySelectorAll("[data-deny]").forEach((btn) =>
       btn.addEventListener("click", () => decide(btn.dataset.deny, "deny"))
     );
+    body.querySelectorAll("[data-revoke]").forEach((btn) =>
+      btn.addEventListener("click", () => revoke(btn.dataset.revoke, btn))
+    );
   }
 
   async function decide(id, decision) {
@@ -152,6 +159,24 @@
         : "Mis à jour.";
       await loadRequests();
     } catch (e) {
+      $("#status-msg").textContent = "Erreur : " + e.message;
+    }
+  }
+
+  async function revoke(id, btn) {
+    if (!confirm("Révoquer l'accès de cette personne ? Son code personnel cessera de fonctionner immédiatement.")) return;
+    btn.disabled = true;
+    $("#status-msg").textContent = "Révocation…";
+    try {
+      await api("/api/master/revoke", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      $("#status-msg").textContent = "Accès révoqué.";
+      await loadRequests();
+    } catch (e) {
+      btn.disabled = false;
       $("#status-msg").textContent = "Erreur : " + e.message;
     }
   }
