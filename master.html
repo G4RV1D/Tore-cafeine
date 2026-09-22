@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Panneau d'administration — privé</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #100c09; color: #ecdfc0; margin: 0; padding: 24px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 20px; color: #c9a227; }
+  .card { background: #1c1610; border: 1px solid #3a2c22; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  label { display: block; font-size: 13px; margin-bottom: 8px; }
+  input[type=password], input[type=text] { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #3a2c22; background: #100c09; color: #ecdfc0; font-size: 14px; }
+  button { background: #c9a227; border: none; color: #17110d; font-weight: 600; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #d4af37; }
+  button.secondary { background: transparent; border: 1px solid #6a534b; color: #ecdfc0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #3a2c22; vertical-align: top; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+  .pill.pending { background: #4b3d1a; color: #e6c65c; }
+  .pill.approved { background: #1f3d24; color: #7fd18a; }
+  .pill.denied { background: #4b1a1a; color: #e67c7c; }
+  .code { font-family: monospace; background: #100c09; padding: 3px 8px; border-radius: 4px; }
+  .row-actions { display: flex; gap: 8px; align-items: center; }
+  select { background: #100c09; color: #ecdfc0; border: 1px solid #3a2c22; border-radius: 4px; padding: 6px; }
+  #status-msg { font-size: 13px; color: #b39a72; }
+  a.link { color: #c9a227; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Panneau d'administration — Le Cabinet des Introuvables</h1>
+
+  <div class="card" id="login-card">
+    <label>Mot de passe maître
+      <input type="password" id="master-key" autocomplete="off" />
+    </label>
+    <button id="login-btn">Entrer</button>
+    <p id="login-status" style="color:#e67c7c;font-size:13px;"></p>
+  </div>
+
+  <div id="panel" hidden>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0;font-size:16px;">Demandes d'accès</h2>
+        <button class="secondary" id="refresh-btn">Rafraîchir</button>
+      </div>
+      <p id="status-msg"></p>
+      <table id="requests-table">
+        <thead>
+          <tr><th>Nom</th><th>Email</th><th>Message</th><th>Statut</th><th>Rôle / Code</th><th>Action</th></tr>
+        </thead>
+        <tbody id="requests-body"></tbody>
+      </table>
+    </div>
+    <p style="font-size:12px;color:#b39a72;">
+      Une fois approuvée, communique le code affiché à la personne (par email, SMS, etc.) — c'est ce code
+      qu'elle utilisera dans « Espace client » sur la page d'accueil.
+    </p>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  const API = window.ELVEN_API_BASE;
+  let masterKey = "";
+
+  const $ = (s) => document.querySelector(s);
+
+  $("#login-btn").addEventListener("click", async () => {
+    masterKey = $("#master-key").value;
+    $("#login-status").textContent = "Vérification…";
+    try {
+      await loadRequests();
+      $("#login-card").hidden = true;
+      $("#panel").hidden = false;
+    } catch (e) {
+      $("#login-status").textContent = "Mot de passe incorrect.";
+    }
+  });
+
+  $("#refresh-btn").addEventListener("click", loadRequests);
+
+  async function api(path, opts) {
+    opts = opts || {};
+    const headers = Object.assign({ "x-master-key": masterKey }, opts.headers || {});
+    const res = await fetch(API + path, Object.assign({}, opts, { headers }));
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.error) || ("Erreur " + res.status));
+    return data;
+  }
+
+  async function loadRequests() {
+    const data = await api("/api/master/requests");
+    renderRequests(data.requests || []);
+  }
+
+  function renderRequests(list) {
+    const body = $("#requests-body");
+    body.innerHTML = "";
+    list.forEach((r) => {
+      const tr = document.createElement("tr");
+      const roleCell = r.status === "approved"
+        ? `${r.role} — <span class="code">${r.code}</span>`
+        : "—";
+
+      const actionCell = r.status === "pending"
+        ? `<div class="row-actions">
+             <select data-id="${r.id}" class="role-select">
+               <option value="viewer">Lecteur</option>
+               <option value="admin">Admin</option>
+             </select>
+             <button data-approve="${r.id}">Approuver</button>
+             <button class="secondary" data-deny="${r.id}">Refuser</button>
+           </div>`
+        : "";
+
+      tr.innerHTML = `
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.email)}</td>
+        <td>${escapeHtml(r.message || "")}</td>
+        <td><span class="pill ${r.status}">${r.status}</span></td>
+        <td>${roleCell}</td>
+        <td>${actionCell}</td>
+      `;
+      body.appendChild(tr);
+    });
+
+    body.querySelectorAll("[data-approve]").forEach((btn) =>
+      btn.addEventListener("click", () => decide(btn.dataset.approve, "approve"))
+    );
+    body.querySelectorAll("[data-deny]").forEach((btn) =>
+      btn.addEventListener("click", () => decide(btn.dataset.deny, "deny"))
+    );
+  }
+
+  async function decide(id, decision) {
+    const roleSelect = document.querySelector(`.role-select[data-id="${id}"]`);
+    const role = roleSelect ? roleSelect.value : "viewer";
+    $("#status-msg").textContent = "Mise à jour…";
+    try {
+      const data = await api("/api/master/decide", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, decision, role }),
+      });
+      $("#status-msg").textContent = data.code
+        ? `Approuvé — code personnel : ${data.code} (à transmettre à la personne)`
+        : "Mis à jour.";
+      await loadRequests();
+    } catch (e) {
+      $("#status-msg").textContent = "Erreur : " + e.message;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+})();
+</script>
+</body>
+</html>

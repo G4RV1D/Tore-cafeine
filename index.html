@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brûlerie Solstice — Café d'exception en abonnement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=1" />
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- SCREEN 1 — decoy: fake artisanal coffee-subscription page      -->
+<!-- ============================================================ -->
+<div id="decoy">
+  <header class="d-header">
+    <div class="d-wrap d-nav">
+      <div class="d-logo">Brûlerie <span>Solstice</span></div>
+      <nav>
+        <a href="#features">Nos cafés</a>
+        <a href="#specs">Abonnement</a>
+        <a href="#faq">FAQ</a>
+        <button id="open-unlock" class="d-account-link" type="button">Espace client</button>
+      </nav>
+    </div>
+  </header>
+
+  <section class="d-hero">
+    <div class="d-wrap d-hero-grid">
+      <div>
+        <p class="d-eyebrow">Récolte 2026</p>
+        <h1>Un café rare, torréfié à la commande.</h1>
+        <p class="d-sub">Brûlerie Solstice sélectionne des lots de micro-origine auprès de
+          petits producteurs, torréfiés par nos soins quelques jours avant l'envoi pour
+          révéler tout leur caractère en tasse.</p>
+        <a href="#signup" class="d-cta">Recevoir l'offre de bienvenue</a>
+        <p class="d-fine">Inscription gratuite et sans engagement.</p>
+      </div>
+      <div class="d-hero-art" aria-hidden="true">
+        <svg viewBox="0 0 220 320" width="220" height="320">
+          <defs>
+            <linearGradient id="sunburst" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#d8ad4d"/>
+              <stop offset="100%" stop-color="#8a5a2b"/>
+            </linearGradient>
+          </defs>
+          <g opacity="0.55">
+            <path d="M110 30 L118 60 L100 60 Z" fill="#d8ad4d"/>
+            <path d="M70 40 L90 65 L72 70 Z" fill="#d8ad4d"/>
+            <path d="M150 40 L130 65 L148 70 Z" fill="#d8ad4d"/>
+            <path d="M40 65 L68 82 L52 92 Z" fill="#d8ad4d"/>
+            <path d="M180 65 L152 82 L168 92 Z" fill="#d8ad4d"/>
+          </g>
+          <rect x="55" y="100" width="110" height="90" rx="6" fill="url(#sunburst)"/>
+          <rect x="55" y="100" width="110" height="14" fill="#3a2415"/>
+          <path d="M165 120 Q200 120 200 145 Q200 170 165 168" fill="none" stroke="#3a2415" stroke-width="8"/>
+          <rect x="60" y="190" width="100" height="18" fill="#3a2415"/>
+          <g stroke="#efe3c8" stroke-width="2" opacity="0.7">
+            <path d="M85 230 Q80 215 90 205" fill="none"/>
+            <path d="M110 236 Q105 218 115 206" fill="none"/>
+            <path d="M135 230 Q130 215 140 205" fill="none"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="d-features">
+    <div class="d-wrap">
+      <h2>Pourquoi Brûlerie&nbsp;Solstice</h2>
+      <div class="d-feature-grid">
+        <div class="d-feature"><h3>Grains d'exception</h3><p>Des lots de micro-origine sélectionnés directement auprès de petits producteurs.</p></div>
+        <div class="d-feature"><h3>Torréfaction fraîche</h3><p>Torréfié quelques jours avant l'envoi, date de torréfaction indiquée sur chaque sachet.</p></div>
+        <div class="d-feature"><h3>Mouture sur-mesure</h3><p>Grains entiers ou moulus selon votre méthode d'extraction préférée.</p></div>
+        <div class="d-feature"><h3>Sans engagement</h3><p>Mettez en pause ou résiliez votre abonnement à tout moment.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="specs" class="d-specs">
+    <div class="d-wrap d-specs-grid">
+      <div>
+        <h2>Votre abonnement</h2>
+        <table>
+          <tr><td>Formule</td><td>Découverte ou Passionné</td></tr>
+          <tr><td>Quantité</td><td>250&nbsp;g ou 500&nbsp;g par envoi</td></tr>
+          <tr><td>Fréquence</td><td>Toutes les 2 semaines ou mensuelle</td></tr>
+          <tr><td>Mouture</td><td>Grains entiers ou moulu sur demande</td></tr>
+          <tr><td>Résiliation</td><td>À tout moment, sans frais</td></tr>
+        </table>
+      </div>
+      <div id="signup" class="d-signup-card">
+        <h2>Recevoir l'offre de bienvenue</h2>
+        <p>Laissez-nous vos coordonnées, notre équipe revient vers vous rapidement.</p>
+        <form id="signup-form">
+          <label>Nom
+            <input type="text" name="name" required maxlength="200" />
+          </label>
+          <label>Email
+            <input type="email" name="email" required maxlength="200" />
+          </label>
+          <label>Message (facultatif)
+            <textarea name="message" maxlength="500" rows="3"></textarea>
+          </label>
+          <button type="submit">S'inscrire</button>
+          <p id="signup-status" class="d-fine" role="status"></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="d-faq">
+    <div class="d-wrap">
+      <h2>Questions fréquentes</h2>
+      <details><summary>Quels sont les délais de livraison ?</summary><p>Sous 3 à 5 jours ouvrés en France métropolitaine.</p></details>
+      <details><summary>Puis-je choisir ma mouture ?</summary><p>Oui, vous précisez votre méthode d'extraction lors de la commande.</p></details>
+      <details><summary>Puis-je suspendre mon abonnement ?</summary><p>Oui, à tout moment depuis votre espace client.</p></details>
+    </div>
+  </section>
+
+  <footer class="d-footer">
+    <div class="d-wrap">Brûlerie Solstice — Tous droits réservés.</div>
+  </footer>
+</div>
+
+<!-- ============================================================ -->
+<!-- Unlock modal — disguised as a customer-area login              -->
+<!-- ============================================================ -->
+<div id="unlock-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close" type="button" data-close="unlock-modal">&times;</button>
+    <h2>Espace client</h2>
+    <p class="d-fine">Entrez votre code personnel pour accéder à votre espace.</p>
+    <form id="unlock-form">
+      <label>Code d'accès
+        <input type="text" name="code" required maxlength="40" autocomplete="off" placeholder="CDI-XXXX-XXXX" />
+      </label>
+      <button type="submit">Accéder</button>
+      <p id="unlock-status" class="d-fine" role="status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SCREEN 2 — the real library, revealed after a valid code       -->
+<!-- ============================================================ -->
+<div id="app" hidden>
+  <header id="e-header" class="e-header">
+    <div class="e-wrap e-header-inner">
+      <div class="e-brand">
+        <span class="e-brand-glyph">❖</span>
+        <span>Le Cabinet des Introuvables</span>
+      </div>
+      <div class="e-header-actions">
+        <span id="e-welcome" class="e-welcome"></span>
+        <button id="e-request-book-btn" class="e-btn e-btn-ghost">Demander un livre</button>
+        <button id="e-book-requests-btn" class="e-btn e-btn-ghost" hidden>Demandes des lecteurs</button>
+        <button id="e-add-book-btn" class="e-btn e-btn-ghost" hidden>+ Ajouter un livre</button>
+        <button id="e-logout" class="e-btn e-btn-copper">Larcin Effectué !</button>
+      </div>
+    </div>
+  </header>
+
+  <section id="e-oath" class="e-oath">
+    <div class="e-oath-box">
+      <p class="e-oath-text">
+        Messieurs Varenne, Castellane, Orsigny et Fontenoy ont l'honneur de vous ouvrir
+        les portes <span class="e-oath-title">du Cabinet des Introuvables.</span>
+      </p>
+      <p class="e-oath-text e-oath-text-2">
+        Vous devez promettre que vos intentions sont obscures.
+      </p>
+      <button id="e-oath-btn" class="e-btn e-btn-gold" type="button">Je le jure</button>
+      <p class="e-oath-note">
+        Une fois votre méfait achevé, songez à refermer la porte derrière vous
+        en cliquant sur « Larcin Effectué ! ».
+      </p>
+    </div>
+  </section>
+
+  <div id="e-library-content" class="e-wrap e-layout" hidden>
+    <section id="e-recent" class="e-recent" hidden>
+      <h3 class="e-recent-title">❖ Derniers ajouts</h3>
+      <div id="e-recent-row" class="e-recent-row"></div>
+    </section>
+
+    <aside class="e-sidebar">
+      <h3>Rayons &amp; genres</h3>
+      <nav id="e-genre-list" class="e-genre-list">
+        <button class="e-genre active" data-genre="">Tous les livres</button>
+      </nav>
+    </aside>
+
+    <main class="e-main">
+      <div class="e-toolbar">
+        <input id="e-search" type="search" placeholder="Rechercher un titre, un auteur, un tag…" />
+      </div>
+      <div id="e-grid" class="e-grid"></div>
+      <p id="e-empty" class="e-empty" hidden>Aucun livre ici pour le moment.</p>
+    </main>
+  </div>
+</div>
+
+<!-- Book detail modal -->
+<div id="book-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-book-modal">
+    <button class="modal-close" type="button" data-close="book-modal">&times;</button>
+    <div class="e-book-modal-scroll">
+      <div class="e-book-modal-grid">
+        <img id="bm-cover" src="" alt="" />
+        <div class="e-book-modal-info">
+          <h2 id="bm-title"></h2>
+          <p id="bm-author" class="e-book-author"></p>
+          <p class="e-book-meta">
+            <span id="bm-date"></span> · <span id="bm-genre"></span>
+          </p>
+          <div id="bm-tags" class="e-tags"></div>
+          <h4>Résumé</h4>
+          <p id="bm-summary"></p>
+          <h4 id="bm-extract-title" hidden>Extrait</h4>
+          <p id="bm-extract" class="e-extract"></p>
+          <div class="e-book-modal-actions">
+            <a id="bm-download" class="e-btn e-btn-gold" href="#" download>Télécharger l'ebook</a>
+            <button id="bm-edit-btn" class="e-btn e-btn-ghost" type="button" hidden>Modifier les informations</button>
+            <button id="bm-delete-btn" class="e-btn e-btn-danger" type="button" hidden>Supprimer ce livre</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit-book modal (admins only) — fill in missing author/date/summary/etc. -->
+<div id="edit-book-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close" type="button" data-close="edit-book-modal">&times;</button>
+    <h2>Modifier le livre</h2>
+    <form id="edit-book-form">
+      <input type="hidden" name="book_id" />
+      <label>Titre *
+        <input type="text" name="title" required maxlength="300" />
+      </label>
+      <label>Auteur
+        <input type="text" name="author" maxlength="200" />
+      </label>
+      <label>Genre *
+        <input type="text" name="genre" required maxlength="100" placeholder="Fantasy, Science-fiction, Romance…" list="genre-suggestions" />
+      </label>
+      <label>Date de sortie
+        <input type="text" name="release_date" maxlength="50" placeholder="2014 ou 12/03/2014" />
+      </label>
+      <label>Tags (séparés par des virgules)
+        <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
+      </label>
+      <label>Résumé
+        <textarea name="summary" rows="3" maxlength="2000"></textarea>
+      </label>
+      <label>Extrait
+        <textarea name="extract" rows="4" maxlength="4000"></textarea>
+      </label>
+      <label>Remplacer la couverture (facultatif)
+        <input type="file" name="cover" accept="image/*" />
+      </label>
+      <label>Remplacer le fichier ebook (facultatif)
+        <input type="file" name="ebook" accept=".epub,.pdf,.mobi,.azw3,.txt" />
+      </label>
+      <button type="submit">Enregistrer les modifications</button>
+      <p id="edit-book-status" class="d-fine" role="status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Delete-book confirmation modal (admins only) -->
+<div id="delete-confirm-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-confirm-box">
+    <button class="modal-close" type="button" data-close="delete-confirm-modal">&times;</button>
+    <h2>Supprimer ce livre ?</h2>
+    <p>Tu es sur le point de supprimer définitivement « <strong id="delete-confirm-title"></strong> » du
+      Cabinet, ainsi que sa couverture et son fichier ebook. Cette action est irréversible.</p>
+    <div class="e-confirm-actions">
+      <button id="delete-confirm-cancel" class="e-btn e-btn-ghost" type="button">Annuler</button>
+      <button id="delete-confirm-go" class="e-btn e-btn-danger" type="button">Oui, supprimer</button>
+    </div>
+    <p id="delete-confirm-status" class="d-fine" role="status"></p>
+  </div>
+</div>
+
+<!-- Request-a-book modal (any approved reader) -->
+<div id="request-book-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close" type="button" data-close="request-book-modal">&times;</button>
+    <h2>Demander un livre</h2>
+    <p class="d-fine">Il manque un ouvrage au Cabinet ? Fais-en la demande, elle sera transmise aux
+      administrateurs.</p>
+    <form id="request-book-form">
+      <label>Titre *
+        <input type="text" name="title" required maxlength="300" />
+      </label>
+      <label>Auteur (si connu)
+        <input type="text" name="author" maxlength="200" />
+      </label>
+      <label>Précisions (facultatif)
+        <textarea name="note" rows="3" maxlength="1000"></textarea>
+      </label>
+      <button type="submit">Envoyer la demande</button>
+      <p id="request-book-status" class="d-fine" role="status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Book-requests panel (admins only) -->
+<div id="book-requests-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-requests-box">
+    <button class="modal-close" type="button" data-close="book-requests-modal">&times;</button>
+    <h2>Demandes des lecteurs</h2>
+    <div id="book-requests-list" class="e-requests-list"></div>
+    <p id="book-requests-empty" class="d-fine" hidden>Aucune demande en attente pour le moment.</p>
+  </div>
+</div>
+
+<!-- Add-book modal (admins only) -->
+<div id="add-book-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close" type="button" data-close="add-book-modal">&times;</button>
+    <h2>Ajouter un livre</h2>
+    <form id="add-book-form">
+      <label>Titre *
+        <input type="text" name="title" required maxlength="300" />
+      </label>
+      <label>Auteur
+        <input type="text" name="author" maxlength="200" />
+      </label>
+      <label>Genre *
+        <input type="text" name="genre" required maxlength="100" placeholder="Fantasy, Science-fiction, Romance…" list="genre-suggestions" />
+        <datalist id="genre-suggestions"></datalist>
+      </label>
+      <label>Date de sortie
+        <input type="text" name="release_date" maxlength="50" placeholder="2014 ou 12/03/2014" />
+      </label>
+      <label>Tags (séparés par des virgules)
+        <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
+      </label>
+      <label>Résumé
+        <textarea name="summary" rows="3" maxlength="2000"></textarea>
+      </label>
+      <label>Extrait
+        <textarea name="extract" rows="4" maxlength="4000"></textarea>
+      </label>
+      <label>Couverture (image)
+        <input type="file" name="cover" accept="image/*" />
+      </label>
+      <label>Fichier ebook (epub, pdf…)
+        <input type="file" name="ebook" accept=".epub,.pdf,.mobi,.azw3,.txt" />
+      </label>
+      <button type="submit">Ajouter à la bibliothèque</button>
+      <p id="add-book-status" class="d-fine" role="status"></p>
+    </form>
+  </div>
+</div>
+
+<script src="config.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
