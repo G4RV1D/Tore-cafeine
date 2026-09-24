@@ -6,7 +6,7 @@
 <title>Brûlerie Solstice — Café d'exception en abonnement</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=1" />
 </head>
 <body>
@@ -153,10 +153,22 @@
         <span class="e-brand-glyph">❖</span>
         <span>Le Cabinet des Introuvables</span>
       </div>
-      <div class="e-header-actions">
+      <button id="e-nav-toggle" class="e-nav-toggle" type="button" aria-label="Ouvrir le menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="e-header-actions" class="e-header-actions">
         <span id="e-welcome" class="e-welcome"></span>
+        <button id="e-updates-btn" class="e-btn e-btn-ghost e-btn-bell" type="button" title="Nouveautés du Cabinet">
+          <span class="e-bell-icon" aria-hidden="true">🔔</span><span class="e-bell-label">Nouveautés</span>
+          <span id="e-updates-badge" class="e-updates-badge" hidden>0</span>
+        </button>
+        <button id="e-theme-btn" class="e-btn e-btn-ghost e-btn-theme" type="button" title="Couleur du néon">
+          <span id="e-theme-dot" class="e-theme-dot" aria-hidden="true"></span><span>Couleur</span>
+        </button>
         <button id="e-request-book-btn" class="e-btn e-btn-ghost">Demander un livre</button>
         <button id="e-book-requests-btn" class="e-btn e-btn-ghost" hidden>Demandes des lecteurs</button>
+        <button id="e-visitors-btn" class="e-btn e-btn-ghost" type="button" hidden>Derniers visiteurs</button>
+        <button id="e-publish-update-btn" class="e-btn e-btn-ghost" type="button" hidden>+ Nouveauté</button>
         <button id="e-add-book-btn" class="e-btn e-btn-ghost" hidden>+ Ajouter un livre</button>
         <button id="e-logout" class="e-btn e-btn-copper">Larcin Effectué !</button>
       </div>
@@ -181,12 +193,27 @@
   </section>
 
   <div id="e-library-content" class="e-wrap e-layout" hidden>
+    <section id="e-resume" class="e-recent" hidden>
+      <h3 class="e-recent-title">❖ Reprendre où je me suis arrêté</h3>
+      <div id="e-resume-row" class="e-recent-row"></div>
+    </section>
+
     <section id="e-recent" class="e-recent" hidden>
       <h3 class="e-recent-title">❖ Derniers ajouts</h3>
       <div id="e-recent-row" class="e-recent-row"></div>
     </section>
 
     <aside class="e-sidebar">
+      <div id="e-stats-box" class="e-stats-box">
+        <div class="e-stat">
+          <span id="e-stat-total" class="e-stat-value">0</span>
+          <span class="e-stat-label">livres dans la bibliothèque</span>
+        </div>
+        <div class="e-stat">
+          <span id="e-stat-downloads" class="e-stat-value">0</span>
+          <span class="e-stat-label">téléchargés cette session</span>
+        </div>
+      </div>
       <h3>Rayons &amp; genres</h3>
       <nav id="e-genre-list" class="e-genre-list">
         <button class="e-genre active" data-genre="">Tous les livres</button>
@@ -321,6 +348,17 @@
   </div>
 </div>
 
+<!-- Recent-visitors panel (admins only) -->
+<div id="visitors-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-requests-box">
+    <button class="modal-close" type="button" data-close="visitors-modal">&times;</button>
+    <h2>❖ Derniers visiteurs</h2>
+    <p class="d-fine">Les 10 derniers lecteurs venus au Cabinet, et ce qu'ils y ont téléchargé.</p>
+    <div id="visitors-list" class="e-visitors-list"></div>
+    <p id="visitors-empty" class="d-fine" hidden>Aucune visite enregistrée pour le moment.</p>
+  </div>
+</div>
+
 <!-- Add-book modal (admins only) -->
 <div id="add-book-modal" class="modal-overlay" hidden>
   <div class="modal-box">
@@ -360,6 +398,64 @@
     </form>
   </div>
 </div>
+
+<!-- "Nouveautés" panel — lets readers see the latest announcements -->
+<div id="updates-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-updates-box">
+    <button class="modal-close" type="button" data-close="updates-modal">&times;</button>
+    <h2>❖ Nouveautés du Cabinet</h2>
+    <div id="updates-list" class="e-updates-list"></div>
+    <p id="updates-empty" class="d-fine" hidden>Rien à signaler pour l'instant — reviens bientôt.</p>
+  </div>
+</div>
+
+<!-- Neon color picker — a per-visitor preference, saved in this browser only -->
+<div id="theme-modal" class="modal-overlay" hidden>
+  <div class="modal-box e-theme-box">
+    <button class="modal-close" type="button" data-close="theme-modal">&times;</button>
+    <h2>❖ Couleur du néon</h2>
+    <p class="d-fine">Change l'accent lumineux du Cabinet — ce choix reste sur cet appareil.</p>
+    <div id="theme-swatches" class="e-theme-swatches">
+      <button type="button" class="e-theme-swatch" data-neon="cyan">
+        <span class="e-theme-swatch-dot" data-neon-preview="cyan"></span>Bleu glace
+      </button>
+      <button type="button" class="e-theme-swatch" data-neon="pink">
+        <span class="e-theme-swatch-dot" data-neon-preview="pink"></span>Rose néon
+      </button>
+      <button type="button" class="e-theme-swatch" data-neon="purple">
+        <span class="e-theme-swatch-dot" data-neon-preview="purple"></span>Violet spectre
+      </button>
+      <button type="button" class="e-theme-swatch" data-neon="green">
+        <span class="e-theme-swatch-dot" data-neon-preview="green"></span>Vert émeraude
+      </button>
+      <button type="button" class="e-theme-swatch" data-neon="amber">
+        <span class="e-theme-swatch-dot" data-neon-preview="amber"></span>Ambre Tron Legacy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Publish-update modal (admins only) -->
+<div id="publish-update-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <button class="modal-close" type="button" data-close="publish-update-modal">&times;</button>
+    <h2>Publier une nouveauté</h2>
+    <p class="d-fine">Ce message apparaîtra pour tous les lecteurs dans le panneau « Nouveautés ».</p>
+    <form id="publish-update-form">
+      <label>Titre *
+        <input type="text" name="title" required maxlength="200" placeholder="Ex. : 12 nouveaux livres ce mois-ci" />
+      </label>
+      <label>Message *
+        <textarea name="body" rows="4" required maxlength="2000"></textarea>
+      </label>
+      <button type="submit">Publier</button>
+      <p id="publish-update-status" class="d-fine" role="status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Floating back-to-top -->
+<button id="e-back-to-top" class="e-back-to-top" type="button" title="Remonter" hidden>↑</button>
 
 <!-- E-reader — reads EPUB files in the browser, with Kindle-style comfort settings -->
 <div id="reader-modal" class="reader-overlay" hidden>

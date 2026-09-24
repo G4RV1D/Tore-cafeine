@@ -5,6 +5,24 @@
   const LS_CODE = "elven_access_code";
   const LS_ROLE = "elven_role";
   const LS_NAME = "elven_name";
+  const LS_NEON = "cdi_neon_theme";
+  const NEON_THEMES = ["cyan", "pink", "purple", "green", "amber"];
+  // per-tab session counter (sessionStorage, not localStorage): resets every
+  // time the tab/session actually ends, unlike the visitor's neon preference
+  const LS_SESSION_DOWNLOADS = "cdi_session_downloads";
+
+  // applied immediately (before anything else renders) so there's no flash
+  // of the wrong accent color — this is a per-visitor preference read from
+  // this browser's own storage, never sent anywhere.
+  // Set on <html>, not #app: the modals (book-modal, updates-modal, etc.)
+  // are siblings of #app in the DOM, not descendants of it, so scoping the
+  // CSS variable override to #app would silently leave every modal cyan.
+  (function applyStoredNeonTheme() {
+    const saved = localStorage.getItem(LS_NEON);
+    if (saved && NEON_THEMES.includes(saved) && saved !== "cyan") {
+      document.documentElement.dataset.neon = saved;
+    }
+  })();
 
   let state = {
     code: localStorage.getItem(LS_CODE) || "",
@@ -14,6 +32,7 @@
     genres: [],
     activeGenre: "",
     search: "",
+    totalBooks: 0,
   };
 
   // ---------- tiny helpers ----------
@@ -34,6 +53,177 @@
       if (e.target === overlay) overlay.hidden = true;
     })
   );
+
+  // ---------- scroll-reveal (fade/slide-up as elements enter the viewport) ----------
+  const revealObserver = "IntersectionObserver" in window
+    ? new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              revealObserver.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+      )
+    : null;
+
+  function observeReveal(el, i) {
+    if (!el) return;
+    el.classList.add("reveal");
+    if (i != null) el.style.setProperty("--i", i);
+    if (revealObserver) revealObserver.observe(el);
+    else el.classList.add("is-visible"); // no IO support: just show it
+  }
+
+  // static decoy sections reveal as soon as the page is scrolled to them
+  $$(".d-feature, .d-signup-card, .d-specs-grid > div:first-child, .d-faq details").forEach((el, i) =>
+    observeReveal(el, i % 6)
+  );
+
+  // Safety net: some environments (odd zoom levels, embedded webviews, a
+  // screenshot/print tool) never fire the IntersectionObserver callback the
+  // way a normal scrolling visit does. Nothing should stay permanently
+  // invisible just because of that, so force-reveal anything still hidden
+  // a couple of seconds after load.
+  setTimeout(() => {
+    $$(".reveal:not(.is-visible)").forEach((el) => el.classList.add("is-visible"));
+  }, 2500);
+
+  // ---------- ripple feedback on buttons ----------
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".e-btn, .d-cta, .d-account-link");
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 1.4;
+    const ripple = document.createElement("span");
+    ripple.className = "e-ripple";
+    ripple.style.width = ripple.style.height = size + "px";
+    ripple.style.left = (e.clientX - rect.left - size / 2) + "px";
+    ripple.style.top = (e.clientY - rect.top - size / 2) + "px";
+    btn.appendChild(ripple);
+    ripple.addEventListener("animationend", () => ripple.remove());
+  });
+
+  // ---------- mobile nav toggle (library header) ----------
+  const navToggle = $("#e-nav-toggle");
+  const headerActions = $("#e-header-actions");
+  if (navToggle && headerActions) {
+    navToggle.addEventListener("click", () => {
+      const open = headerActions.classList.toggle("open");
+      navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    // tapping any action inside the mobile menu closes it afterwards
+    headerActions.addEventListener("click", (e) => {
+      if (window.innerWidth <= 880 && e.target.closest(".e-btn")) {
+        headerActions.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // ---------- back-to-top ----------
+  const backToTop = $("#e-back-to-top");
+  if (backToTop) {
+    window.addEventListener("scroll", () => {
+      backToTop.classList.toggle("is-visible", window.scrollY > 480);
+    }, { passive: true });
+    backToTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
+  // ---------- book-cover tilt on hover (pointer devices only) ----------
+  const supportsHoverTilt = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  function wireTilt(card) {
+    if (!supportsHoverTilt) return;
+    const cover = card.querySelector(".e-card-cover, .e-recent-cover");
+    if (!cover) return;
+    card.addEventListener("mousemove", (e) => {
+      const r = card.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5;
+      const py = (e.clientY - r.top) / r.height - 0.5;
+      cover.style.setProperty("--ry", (px * 14).toFixed(2) + "deg");
+      cover.style.setProperty("--rx", (-py * 14).toFixed(2) + "deg");
+    });
+    card.addEventListener("mouseleave", () => {
+      cover.style.setProperty("--rx", "0deg");
+      cover.style.setProperty("--ry", "0deg");
+    });
+  }
+
+  // ---------- "Derniers ajouts" auto-scrolling rail ----------
+  // Drifts continuously to the left; the card set is duplicated once so the
+  // loop can wrap seamlessly (jumping back by exactly one set's width is
+  // invisible). Pauses on hover/touch/manual-scroll and while the tab is
+  // hidden; skipped entirely for prefers-reduced-motion or if there aren't
+  // enough cards to make a loop worthwhile.
+  const prefersReducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let recentAutoScrollPaused = false;
+  let recentAutoScrollRafId = null;
+
+  // resuming from a pause resyncs the accumulator to wherever the rail
+  // actually is (the user may have dragged/scrolled it manually while paused)
+  function resumeAutoScroll(row) {
+    row._eScrollPos = row.scrollLeft;
+    recentAutoScrollPaused = false;
+  }
+
+  function setupAutoScrollPauseTriggers(row) {
+    if (row.dataset.autoScrollWired === "1") return;
+    row.dataset.autoScrollWired = "1";
+    row.addEventListener("click", (e) => {
+      const card = e.target.closest(".e-recent-card");
+      const id = card && card.dataset.bookId;
+      if (id) openBook(id);
+    });
+    row.addEventListener("mouseenter", () => { recentAutoScrollPaused = true; });
+    row.addEventListener("mouseleave", () => resumeAutoScroll(row));
+    row.addEventListener("touchstart", () => { recentAutoScrollPaused = true; }, { passive: true });
+    row.addEventListener("touchend", () => { setTimeout(() => resumeAutoScroll(row), 1500); }, { passive: true });
+    row.addEventListener("wheel", () => {
+      recentAutoScrollPaused = true;
+      clearTimeout(row._eResumeTimer);
+      row._eResumeTimer = setTimeout(() => resumeAutoScroll(row), 1500);
+    }, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) recentAutoScrollPaused = true;
+    });
+  }
+
+  // (re)starts the drift loop for the current set of cards in `row` — called
+  // fresh every time renderRecent repopulates the rail
+  function wireAutoScroll(row, originalCount) {
+    if (recentAutoScrollRafId) { cancelAnimationFrame(recentAutoScrollRafId); recentAutoScrollRafId = null; }
+    row.scrollLeft = 0;
+    row._eScrollPos = 0;
+    if (prefersReducedMotion || originalCount < 3) return;
+
+    setupAutoScrollPauseTriggers(row);
+
+    // duplicate the original cards once so scrolling past the end can wrap
+    const originals = Array.from(row.children);
+    originals.forEach((card) => { const clone = card.cloneNode(true); wireTilt(clone); row.appendChild(clone); });
+
+    const SPEED = 0.45; // px per animation frame (~27px/s at 60fps)
+
+    function step() {
+      // re-measured every frame rather than once up front: the rail is
+      // populated while the oath→library transition is still mid-flight
+      // (the library panel is still `display:none` for ~500ms), so a single
+      // upfront measurement can permanently capture a width of 0
+      const halfWidth = row.scrollWidth / 2;
+      if (!recentAutoScrollPaused && halfWidth > 0) {
+        // accumulate in JS, not in row.scrollLeft directly — the DOM rounds
+        // scrollLeft to a whole pixel on every read, which would silently
+        // swallow a sub-pixel-per-frame increment like SPEED forever
+        row._eScrollPos += SPEED;
+        if (row._eScrollPos >= halfWidth) row._eScrollPos -= halfWidth;
+        row.scrollLeft = row._eScrollPos;
+      }
+      recentAutoScrollRafId = requestAnimationFrame(step);
+    }
+    recentAutoScrollRafId = requestAnimationFrame(step);
+  }
 
   async function api(path, opts) {
     opts = opts || {};
@@ -110,6 +300,111 @@
     localStorage.removeItem(LS_NAME);
   }
 
+  // ---------- stats: library size + this session's downloads ----------
+  function updateStatsDisplay() {
+    const totalEl = $("#e-stat-total");
+    const dlEl = $("#e-stat-downloads");
+    if (totalEl) totalEl.textContent = String(state.totalBooks || 0);
+    if (dlEl) dlEl.textContent = sessionStorage.getItem(LS_SESSION_DOWNLOADS) || "0";
+  }
+
+  function incrementSessionDownloads() {
+    let n = Number(sessionStorage.getItem(LS_SESSION_DOWNLOADS) || "0") + 1;
+    try { sessionStorage.setItem(LS_SESSION_DOWNLOADS, String(n)); } catch {}
+    updateStatsDisplay();
+  }
+
+  // fire-and-forget: these two never block the UI and never surface errors —
+  // they're purely informational for the admin "derniers visiteurs" panel
+  function logVisit() {
+    if (!state.code) return;
+    api("/api/log-visit", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-access-code": state.code },
+      body: JSON.stringify({}),
+    }).catch(() => {});
+  }
+
+  function logDownload(bookId, bookTitle) {
+    if (!state.code || !bookId) return;
+    api("/api/log-download", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-access-code": state.code },
+      body: JSON.stringify({ book_id: bookId, book_title: bookTitle || "" }),
+    }).catch(() => {});
+  }
+
+  // exposed so the separate e-reader script (below, its own IIFE) can report
+  // a download-link click without the two scripts needing to share scope
+  window.__cdiTrackDownload = function (bookId, bookTitle) {
+    incrementSessionDownloads();
+    logDownload(bookId, bookTitle);
+  };
+
+  // ---------- "reprendre où je me suis arrêté" — reuses the e-reader's own
+  // per-book localStorage progress (cdi_reader_book_<id>), scoped to this
+  // browser/visitor exactly like the neon theme preference ----------
+  const READER_KEY_PREFIX = "cdi_reader_book_";
+
+  function getResumeList() {
+    const items = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(READER_KEY_PREFIX)) continue;
+      let st;
+      try { st = JSON.parse(localStorage.getItem(key)); } catch { continue; }
+      if (!st || !st.lastCfi) continue;
+      const id = key.slice(READER_KEY_PREFIX.length);
+      const book = state.books.find((b) => String(b.id) === id);
+      if (!book) continue; // not in the (currently loaded) library — skip
+      items.push({ id, book, lastReadAt: st.lastReadAt || "" });
+    }
+    items.sort((a, b) => (a.lastReadAt < b.lastReadAt ? 1 : -1));
+    return items.slice(0, 10);
+  }
+
+  async function resumeBook(id) {
+    try {
+      const data = await api(`/api/book/${encodeURIComponent(id)}?code=${encodeURIComponent(state.code)}`, {
+        headers: { "x-access-code": state.code },
+      });
+      if (typeof window.__openEbookReader === "function") {
+        window.__openEbookReader(data.book);
+      }
+    } catch (err) {
+      alert("Impossible de reprendre ce livre : " + err.message);
+    }
+  }
+
+  function renderResume() {
+    const section = $("#e-resume");
+    const row = $("#e-resume-row");
+    if (!section || !row) return;
+    const items = getResumeList();
+    row.innerHTML = "";
+    if (!items.length) { section.hidden = true; return; }
+    section.hidden = false;
+    items.forEach(({ id, book }, i) => {
+      const card = document.createElement("button");
+      card.className = "e-recent-card";
+      card.type = "button";
+      card.dataset.bookId = id;
+      card.innerHTML = `
+        <div class="e-recent-cover">${book.cover_url ? `<img loading="lazy" src="${API}${book.cover_url}" alt="Couverture de ${escapeHtml(book.title)}" />` : ""}</div>
+        <div class="e-recent-card-title">${escapeHtml(book.title)}</div>
+      `;
+      wireTilt(card);
+      card.style.animation = `eFadeIn .5s ease both`;
+      card.style.animationDelay = (i * 40) + "ms";
+      card.addEventListener("click", () => resumeBook(id));
+      row.appendChild(card);
+    });
+  }
+
+  // the reader IIFE below calls this whenever it closes, so a book that was
+  // just started (or just finished) updates the rail without a full reload
+  window.__cdiRefreshResume = renderResume;
+
   // ---------- switching screens ----------
   async function enterLibrary() {
     hide($("#decoy"));
@@ -117,10 +412,14 @@
     $("#e-welcome").textContent = state.name ? `Bienvenue, ${state.name}` : "";
     $("#e-add-book-btn").hidden = state.role !== "admin";
     $("#e-book-requests-btn").hidden = state.role !== "admin";
+    $("#e-visitors-btn").hidden = state.role !== "admin";
+    $("#e-publish-update-btn").hidden = state.role !== "admin";
+    updateStatsDisplay();
     // Only the oath is visible at first — header and library reveal after it's sworn.
     hide($("#e-header"));
     show($("#e-oath"));
     hide($("#e-library-content"));
+    loadUpdates(); // fetch in the background so the "nouveautés" badge is ready early
   }
 
   $("#e-oath-btn").addEventListener("click", async () => {
@@ -134,6 +433,8 @@
     }, 500);
     await loadBooks();
     await loadRecent();
+    renderResume();
+    logVisit();
   });
 
   function leaveLibrary() {
@@ -144,7 +445,25 @@
   $("#e-logout").addEventListener("click", leaveLibrary);
 
   // ---------- library data ----------
+  function renderSkeletonGrid(count) {
+    const grid = $("#e-grid");
+    if (!grid) return;
+    $("#e-empty").hidden = true;
+    grid.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+      const card = document.createElement("div");
+      card.className = "e-card skeleton";
+      card.innerHTML = `
+        <div class="e-card-cover"></div>
+        <div class="e-card-title">&nbsp;</div>
+        <div class="e-card-author">&nbsp;</div>
+      `;
+      grid.appendChild(card);
+    }
+  }
+
   async function loadBooks() {
+    renderSkeletonGrid(10);
     const params = new URLSearchParams({ code: state.code });
     if (state.activeGenre) params.set("genre", state.activeGenre);
     try {
@@ -153,6 +472,12 @@
       });
       state.books = data.books || [];
       state.genres = data.genres || [];
+      // the total-library count should reflect ALL books, not the active genre
+      // filter — only update it from an unfiltered fetch
+      if (!state.activeGenre) {
+        state.totalBooks = state.books.length;
+        updateStatsDisplay();
+      }
       renderGenres();
       renderGrid();
       fillGenreSuggestions();
@@ -208,6 +533,8 @@
         <div class="e-card-author">${escapeHtml(book.author || "")}</div>
       `;
       card.addEventListener("click", () => openBook(book.id));
+      wireTilt(card);
+      observeReveal(card, i % 12);
       grid.appendChild(card);
     });
   }
@@ -223,6 +550,10 @@
       const data = await api("/api/books?code=" + encodeURIComponent(state.code), {
         headers: { "x-access-code": state.code },
       });
+      // this fetch is always unfiltered, so it's a reliable source for the
+      // "total books in the library" stat regardless of the active genre
+      state.totalBooks = (data.books || []).length;
+      updateStatsDisplay();
       renderRecent((data.books || []).slice(0, 10));
     } catch (err) {
       // silent — the rail simply stays empty if this fails
@@ -235,17 +566,21 @@
     row.innerHTML = "";
     if (!items.length) { section.hidden = true; return; }
     section.hidden = false;
-    items.forEach((book) => {
+    items.forEach((book, i) => {
       const card = document.createElement("button");
       card.className = "e-recent-card";
       card.type = "button";
+      card.dataset.bookId = book.id;
       card.innerHTML = `
         <div class="e-recent-cover">${book.cover_url ? `<img loading="lazy" src="${API}${book.cover_url}" alt="Couverture de ${escapeHtml(book.title)}" />` : ""}</div>
         <div class="e-recent-card-title">${escapeHtml(book.title)}</div>
       `;
-      card.addEventListener("click", () => openBook(book.id));
+      wireTilt(card);
+      card.style.animation = `eFadeIn .5s ease both`;
+      card.style.animationDelay = (i * 40) + "ms";
       row.appendChild(card);
     });
+    wireAutoScroll(row, items.length);
   }
 
   function escapeHtml(s) {
@@ -284,6 +619,12 @@
       alert("Impossible d'ouvrir ce livre : " + err.message);
     }
   }
+
+  // ---------- track a download click from the book modal ----------
+  $("#bm-download").addEventListener("click", () => {
+    const b = state.currentBook;
+    if (b) window.__cdiTrackDownload(b.id, b.title);
+  });
 
   // ---------- read online (EPUB reader) ----------
   $("#bm-read-btn").addEventListener("click", () => {
@@ -372,6 +713,7 @@
       closeModal("delete-confirm-modal");
       await loadBooks();
       await loadRecent();
+      renderResume();
     } catch (err) {
       status.textContent = "Erreur : " + err.message;
     }
@@ -467,6 +809,189 @@
       })
     );
   }
+
+  // ---------- admin: last 10 visitors + what each one downloaded ----------
+  $("#e-visitors-btn").addEventListener("click", async () => {
+    openModal("visitors-modal");
+    await loadRecentVisitors();
+  });
+
+  async function loadRecentVisitors() {
+    try {
+      const data = await api("/api/admin/recent-visitors", {
+        headers: { "x-access-code": state.code },
+      });
+      renderRecentVisitors(data.visitors || []);
+    } catch (err) {
+      $("#visitors-list").innerHTML = "";
+      const empty = $("#visitors-empty");
+      empty.hidden = false;
+      empty.textContent = "Erreur : " + err.message;
+    }
+  }
+
+  function renderRecentVisitors(list) {
+    const container = $("#visitors-list");
+    const empty = $("#visitors-empty");
+    container.innerHTML = "";
+    if (!list.length) {
+      empty.hidden = false;
+      empty.textContent = "Aucune visite enregistrée pour le moment.";
+      return;
+    }
+    empty.hidden = true;
+    list.forEach((v) => {
+      const row = document.createElement("div");
+      row.className = "e-visitor-row";
+      const date = new Date(v.last_visit);
+      const dateLabel = isNaN(date)
+        ? ""
+        : date.toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      const downloads = v.downloads || [];
+      const downloadsHtml = downloads.length
+        ? `<ul class="e-visitor-downloads">${downloads.map((d) => {
+            const dd = new Date(d.downloaded_at);
+            const ddLabel = isNaN(dd) ? "" : dd.toLocaleDateString("fr-FR");
+            return `<li><span>${escapeHtml(d.book_title || d.book_id)}</span><span class="e-visitor-download-date">${ddLabel}</span></li>`;
+          }).join("")}</ul>`
+        : `<p class="e-visitor-no-downloads">Aucun téléchargement.</p>`;
+      row.innerHTML = `
+        <div class="e-visitor-head">
+          <strong>${escapeHtml(v.name || "Anonyme")}</strong>
+          <span class="e-visitor-role">${v.role === "admin" ? "Admin" : "Lecteur"}</span>
+          <span class="e-visitor-date">${dateLabel}</span>
+        </div>
+        ${downloadsHtml}
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  // ---------- "Nouveautés" — admin-posted announcements, with an unread badge ----------
+  const LS_UPDATES_SEEN = "cdi_updates_seen_at";
+  let latestUpdates = [];
+
+  async function loadUpdates() {
+    try {
+      const data = await api("/api/updates", { headers: { "x-access-code": state.code } });
+      latestUpdates = data.updates || [];
+      refreshUpdatesBadge();
+    } catch (err) {
+      // silent — the bell just won't show a badge if this fails
+    }
+  }
+
+  function refreshUpdatesBadge() {
+    const seenAt = localStorage.getItem(LS_UPDATES_SEEN) || "";
+    const unread = latestUpdates.filter((u) => u.created_at > seenAt).length;
+    const badge = $("#e-updates-badge");
+    if (!badge) return;
+    if (unread > 0) {
+      badge.textContent = String(unread);
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  function renderUpdatesList() {
+    const list = $("#updates-list");
+    const empty = $("#updates-empty");
+    list.innerHTML = "";
+    empty.hidden = latestUpdates.length !== 0;
+    latestUpdates.forEach((u) => {
+      const row = document.createElement("div");
+      row.className = "e-update-item";
+      const date = new Date(u.created_at);
+      const dateLabel = isNaN(date) ? "" : date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+      row.innerHTML = `
+        <h3 class="e-update-title">${escapeHtml(u.title)}</h3>
+        <div class="e-update-date">${dateLabel}</div>
+        <p class="e-update-body">${escapeHtml(u.body)}</p>
+        ${state.role === "admin" ? `<button type="button" class="e-update-remove" data-remove-update="${u.id}" title="Supprimer">&times;</button>` : ""}
+      `;
+      list.appendChild(row);
+    });
+    list.querySelectorAll("[data-remove-update]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Supprimer cette nouveauté ?")) return;
+        try {
+          await api("/api/admin/updates/" + encodeURIComponent(btn.dataset.removeUpdate), {
+            method: "DELETE",
+            headers: { "x-access-code": state.code },
+          });
+          await loadUpdates();
+          renderUpdatesList();
+        } catch (e) {
+          alert("Erreur : " + e.message);
+        }
+      })
+    );
+  }
+
+  $("#e-updates-btn").addEventListener("click", () => {
+    renderUpdatesList();
+    openModal("updates-modal");
+    // mark everything as read the moment the panel is opened
+    if (latestUpdates.length) {
+      localStorage.setItem(LS_UPDATES_SEEN, latestUpdates[0].created_at);
+      refreshUpdatesBadge();
+    }
+  });
+
+  // ---------- neon color picker ----------
+  // lives on <html>, not #app — see the note by applyStoredNeonTheme() above
+  function currentNeonTheme() {
+    return document.documentElement.dataset.neon || "cyan";
+  }
+  function applyNeonTheme(theme) {
+    if (theme === "cyan") delete document.documentElement.dataset.neon;
+    else document.documentElement.dataset.neon = theme;
+    localStorage.setItem(LS_NEON, theme);
+    $("#e-theme-dot").setAttribute("data-neon-preview", theme);
+    $$("#theme-swatches .e-theme-swatch").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.neon === theme);
+    });
+  }
+  $("#e-theme-dot").setAttribute("data-neon-preview", currentNeonTheme());
+  $("#e-theme-btn").addEventListener("click", () => {
+    $$("#theme-swatches .e-theme-swatch").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.neon === currentNeonTheme());
+    });
+    openModal("theme-modal");
+  });
+  $$("#theme-swatches .e-theme-swatch").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyNeonTheme(btn.dataset.neon);
+      closeModal("theme-modal");
+    });
+  });
+
+  $("#e-publish-update-btn").addEventListener("click", () => {
+    $("#publish-update-status").textContent = "";
+    $("#publish-update-form").reset();
+    openModal("publish-update-modal");
+  });
+
+  $("#publish-update-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = $("#publish-update-status");
+    status.textContent = "Publication…";
+    try {
+      await api("/api/admin/updates", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-access-code": state.code },
+        body: JSON.stringify({ title: form.title.value.trim(), body: form.body.value.trim() }),
+      });
+      status.textContent = "Publié !";
+      form.reset();
+      await loadUpdates();
+      setTimeout(() => closeModal("publish-update-modal"), 700);
+    } catch (err) {
+      status.textContent = "Erreur : " + err.message;
+    }
+  });
 
   // ---------- admin: add book ----------
   $("#e-add-book-btn").addEventListener("click", () => openModal("add-book-modal"));
@@ -682,8 +1207,18 @@
     if (rs.rendition) { try { rs.rendition.destroy(); } catch {} rs.rendition = null; }
     if (rs.book) { try { rs.book.destroy(); } catch {} rs.book = null; }
     rs.lastLocation = null;
+    // refresh the library's "reprendre où je me suis arrêté" rail — this
+    // book may have just been started, or its progress just changed
+    if (typeof window.__cdiRefreshResume === "function") window.__cdiRefreshResume();
   }
   $("#reader-close").addEventListener("click", closeReader);
+
+  // ---------- track a download click from inside the reader ----------
+  $("#reader-download").addEventListener("click", () => {
+    if (rs.bookId && typeof window.__cdiTrackDownload === "function") {
+      window.__cdiTrackDownload(rs.bookId, $("#reader-book-title").textContent || "");
+    }
+  });
 
   // ---------- navigation ----------
   $("#reader-prev").addEventListener("click", () => rs.rendition && rs.rendition.prev());
@@ -707,6 +1242,9 @@
     const loc = location || rs.lastLocation;
     if (loc && loc.start && loc.start.cfi) {
       rs.bookState.lastCfi = loc.start.cfi;
+      // used by the library's "reprendre où je me suis arrêté" rail to sort
+      // started books by recency
+      rs.bookState.lastReadAt = new Date().toISOString();
       saveBookState(rs.bookId, rs.bookState);
     }
   }
