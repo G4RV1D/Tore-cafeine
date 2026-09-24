@@ -106,22 +106,35 @@
     ripple.addEventListener("animationend", () => ripple.remove());
   });
 
-  // ---------- mobile nav toggle (library header) ----------
-  const navToggle = $("#e-nav-toggle");
-  const headerActions = $("#e-header-actions");
-  if (navToggle && headerActions) {
-    navToggle.addEventListener("click", () => {
-      const open = headerActions.classList.toggle("open");
-      navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  // ---------- retractable side docks (left: genres/search, right: actions/admin) ----------
+  // Both docks live outside #app in the DOM (see the note in index.html) so
+  // their position:fixed isn't fought by the "#app > *" rule in style.css.
+  function wireDock(tabSel, dockSel) {
+    const tab = $(tabSel);
+    const dock = $(dockSel);
+    if (!tab || !dock) return;
+    tab.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = dock.classList.toggle("open");
+      tab.setAttribute("aria-expanded", open ? "true" : "false");
     });
-    // tapping any action inside the mobile menu closes it afterwards
-    headerActions.addEventListener("click", (e) => {
-      if (window.innerWidth <= 880 && e.target.closest(".e-btn")) {
-        headerActions.classList.remove("open");
-        navToggle.setAttribute("aria-expanded", "false");
+    // clicking anywhere outside an open dock closes it
+    document.addEventListener("click", (e) => {
+      if (dock.classList.contains("open") && !dock.contains(e.target)) {
+        dock.classList.remove("open");
+        tab.setAttribute("aria-expanded", "false");
+      }
+    });
+    // tapping an actual action inside the right dock closes it afterwards
+    dock.addEventListener("click", (e) => {
+      if (e.target.closest(".e-dock-item")) {
+        dock.classList.remove("open");
+        tab.setAttribute("aria-expanded", "false");
       }
     });
   }
+  wireDock("#e-dock-left-tab", "#e-dock-left");
+  wireDock("#e-dock-right-tab", "#e-dock-right");
 
   // ---------- back-to-top ----------
   const backToTop = $("#e-back-to-top");
@@ -278,11 +291,32 @@
       });
       persistSession(code, data.role, data.name);
       closeModal("unlock-modal");
-      enterLibrary();
+      // no more "oath" screen — a quick "bug"/glitch flicker covers the swap
+      // from the coffee decoy straight into the real library
+      playGlitchTransition(enterLibrary);
     } catch (err) {
       status.textContent = "Code invalide.";
     }
   });
+
+  // ---------- decoy -> library transition: a brief "glitch" flicker instead
+  // of the old oath screen. reveal() runs once the overlay is fully opaque,
+  // so the actual screen swap is hidden behind the flicker. ----------
+  function playGlitchTransition(reveal) {
+    const overlay = $("#e-glitch-overlay");
+    if (!overlay) { reveal(); return; }
+    overlay.classList.add("active");
+    setTimeout(reveal, 260);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      overlay.classList.remove("active");
+      overlay.removeEventListener("animationend", finish);
+    };
+    overlay.addEventListener("animationend", finish);
+    setTimeout(finish, 950); // safety net in case animationend doesn't fire
+  }
 
   function persistSession(code, role, name) {
     state.code = code;
@@ -376,6 +410,13 @@
     }
   }
 
+  // removes a book's saved reading position — it drops out of the resume
+  // rail immediately (the section hides itself if it was the last one)
+  function forgetResumeBook(id) {
+    try { localStorage.removeItem(READER_KEY_PREFIX + id); } catch {}
+    renderResume();
+  }
+
   function renderResume() {
     const section = $("#e-resume");
     const row = $("#e-resume-row");
@@ -386,17 +427,33 @@
     section.hidden = false;
     items.forEach(({ id, book }, i) => {
       const card = document.createElement("button");
-      card.className = "e-recent-card";
+      card.className = "e-recent-card e-resume-card";
       card.type = "button";
       card.dataset.bookId = id;
       card.innerHTML = `
+        <span class="e-resume-remove" role="button" tabindex="0" title="Retirer de « Reprendre où je me suis arrêté »">&times;</span>
         <div class="e-recent-cover">${book.cover_url ? `<img loading="lazy" src="${API}${book.cover_url}" alt="Couverture de ${escapeHtml(book.title)}" />` : ""}</div>
         <div class="e-recent-card-title">${escapeHtml(book.title)}</div>
       `;
+      // note: the remove control is a <span role="button">, not a real
+      // <button> — <button> can't nest inside the card, which is itself a
+      // <button>, without the browser mangling the DOM
       wireTilt(card);
       card.style.animation = `eFadeIn .5s ease both`;
       card.style.animationDelay = (i * 40) + "ms";
       card.addEventListener("click", () => resumeBook(id));
+      const removeBtn = card.querySelector(".e-resume-remove");
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        forgetResumeBook(id);
+      });
+      removeBtn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          forgetResumeBook(id);
+        }
+      });
       row.appendChild(card);
     });
   }
@@ -406,41 +463,39 @@
   window.__cdiRefreshResume = renderResume;
 
   // ---------- switching screens ----------
+  // No more oath screen: the library appears directly (behind the glitch
+  // flicker when this follows a manual code entry — see playGlitchTransition).
   async function enterLibrary() {
     hide($("#decoy"));
     show($("#app"));
+    show($("#e-dock-left"));
+    show($("#e-dock-right"));
     $("#e-welcome").textContent = state.name ? `Bienvenue, ${state.name}` : "";
     $("#e-add-book-btn").hidden = state.role !== "admin";
     $("#e-book-requests-btn").hidden = state.role !== "admin";
     $("#e-visitors-btn").hidden = state.role !== "admin";
     $("#e-publish-update-btn").hidden = state.role !== "admin";
+    $("#e-dock-admin-sep").hidden = state.role !== "admin";
     updateStatsDisplay();
-    // Only the oath is visible at first — header and library reveal after it's sworn.
-    hide($("#e-header"));
-    show($("#e-oath"));
-    hide($("#e-library-content"));
+    show($("#e-header"));
+    show($("#e-library-content"));
     loadUpdates(); // fetch in the background so the "nouveautés" badge is ready early
-  }
-
-  $("#e-oath-btn").addEventListener("click", async () => {
-    const oath = $("#e-oath");
-    oath.classList.add("leaving");
-    setTimeout(() => {
-      hide(oath);
-      oath.classList.remove("leaving");
-      show($("#e-header"));
-      show($("#e-library-content"));
-    }, 500);
     await loadBooks();
     await loadRecent();
     renderResume();
     logVisit();
-  });
+  }
 
   function leaveLibrary() {
     clearSession();
     hide($("#app"));
     show($("#decoy"));
+    // hide + collapse both docks so they don't linger visible/open over the
+    // decoy page for the next visitor
+    hide($("#e-dock-left"));
+    hide($("#e-dock-right"));
+    $("#e-dock-left").classList.remove("open");
+    $("#e-dock-right").classList.remove("open");
   }
   $("#e-logout").addEventListener("click", leaveLibrary);
 

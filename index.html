@@ -148,51 +148,26 @@
 <!-- ============================================================ -->
 <div id="app" hidden>
   <header id="e-header" class="e-header">
-    <div class="e-wrap e-header-inner">
-      <div class="e-brand">
-        <span class="e-brand-glyph">❖</span>
-        <span>Le Cabinet des Introuvables</span>
-      </div>
-      <button id="e-nav-toggle" class="e-nav-toggle" type="button" aria-label="Ouvrir le menu" aria-expanded="false">
-        <span></span><span></span><span></span>
-      </button>
+    <div class="e-wrap e-header-inner e-header-inner-minimal">
       <div id="e-header-actions" class="e-header-actions">
         <span id="e-welcome" class="e-welcome"></span>
-        <button id="e-updates-btn" class="e-btn e-btn-ghost e-btn-bell" type="button" title="Nouveautés du Cabinet">
-          <span class="e-bell-icon" aria-hidden="true">🔔</span><span class="e-bell-label">Nouveautés</span>
-          <span id="e-updates-badge" class="e-updates-badge" hidden>0</span>
-        </button>
-        <button id="e-theme-btn" class="e-btn e-btn-ghost e-btn-theme" type="button" title="Couleur du néon">
-          <span id="e-theme-dot" class="e-theme-dot" aria-hidden="true"></span><span>Couleur</span>
-        </button>
-        <button id="e-request-book-btn" class="e-btn e-btn-ghost">Demander un livre</button>
-        <button id="e-book-requests-btn" class="e-btn e-btn-ghost" hidden>Demandes des lecteurs</button>
-        <button id="e-visitors-btn" class="e-btn e-btn-ghost" type="button" hidden>Derniers visiteurs</button>
-        <button id="e-publish-update-btn" class="e-btn e-btn-ghost" type="button" hidden>+ Nouveauté</button>
-        <button id="e-add-book-btn" class="e-btn e-btn-ghost" hidden>+ Ajouter un livre</button>
         <button id="e-logout" class="e-btn e-btn-copper">Larcin Effectué !</button>
       </div>
     </div>
   </header>
 
-  <section id="e-oath" class="e-oath">
-    <div class="e-oath-box">
-      <p class="e-oath-text">
-        Messieurs Varenne, Castellane, Orsigny et Fontenoy ont l'honneur de vous ouvrir
-        les portes <span class="e-oath-title">du Cabinet des Introuvables.</span>
-      </p>
-      <p class="e-oath-text e-oath-text-2">
-        Vous devez promettre que vos intentions sont obscures.
-      </p>
-      <button id="e-oath-btn" class="e-btn e-btn-gold" type="button">Je le jure</button>
-      <p class="e-oath-note">
-        Une fois votre méfait achevé, songez à refermer la porte derrière vous
-        en cliquant sur « Larcin Effectué ! ».
-      </p>
-    </div>
-  </section>
-
   <div id="e-library-content" class="e-wrap e-layout" hidden>
+    <div id="e-stats-box" class="e-stats-box">
+      <div class="e-stat">
+        <span id="e-stat-total" class="e-stat-value">0</span>
+        <span class="e-stat-label">livres dans la bibliothèque</span>
+      </div>
+      <div class="e-stat">
+        <span id="e-stat-downloads" class="e-stat-value">0</span>
+        <span class="e-stat-label">téléchargés cette session</span>
+      </div>
+    </div>
+
     <section id="e-resume" class="e-recent" hidden>
       <h3 class="e-recent-title">❖ Reprendre où je me suis arrêté</h3>
       <div id="e-resume-row" class="e-recent-row"></div>
@@ -203,31 +178,62 @@
       <div id="e-recent-row" class="e-recent-row"></div>
     </section>
 
-    <aside class="e-sidebar">
-      <div id="e-stats-box" class="e-stats-box">
-        <div class="e-stat">
-          <span id="e-stat-total" class="e-stat-value">0</span>
-          <span class="e-stat-label">livres dans la bibliothèque</span>
-        </div>
-        <div class="e-stat">
-          <span id="e-stat-downloads" class="e-stat-value">0</span>
-          <span class="e-stat-label">téléchargés cette session</span>
-        </div>
-      </div>
-      <h3>Rayons &amp; genres</h3>
-      <nav id="e-genre-list" class="e-genre-list">
-        <button class="e-genre active" data-genre="">Tous les livres</button>
-      </nav>
-    </aside>
-
     <main class="e-main">
-      <div class="e-toolbar">
-        <input id="e-search" type="search" placeholder="Rechercher un titre, un auteur, un tag…" />
-      </div>
       <div id="e-grid" class="e-grid"></div>
       <p id="e-empty" class="e-empty" hidden>Aucun livre ici pour le moment.</p>
     </main>
   </div>
+</div>
+
+<!-- Left dock — rayons/genres + recherche. Kept as a SIBLING of #app on
+     purpose: "#app > *" in style.css forces position:relative on #app's
+     direct children, which would silently break this dock's position:fixed,
+     exactly like the modals already avoid by living outside #app. -->
+<div id="e-dock-left" class="e-dock e-dock-left" hidden>
+  <button id="e-dock-left-tab" class="e-dock-tab" type="button" aria-label="Rayons et recherche" aria-expanded="false">☰</button>
+  <div class="e-dock-panel">
+    <div class="e-dock-panel-inner">
+      <div class="e-dock-search">
+        <input id="e-search" type="search" placeholder="Rechercher un titre, un auteur, un tag…" />
+      </div>
+      <h3 class="e-dock-heading">Rayons &amp; genres</h3>
+      <nav id="e-genre-list" class="e-genre-list">
+        <button class="e-genre active" data-genre="">Tous les livres</button>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<!-- Right dock — notifications, préférences et outils admin -->
+<div id="e-dock-right" class="e-dock e-dock-right" hidden>
+  <button id="e-dock-right-tab" class="e-dock-tab" type="button" aria-label="Actions" aria-expanded="false">❖</button>
+  <div class="e-dock-panel">
+    <div class="e-dock-panel-inner">
+      <button id="e-updates-btn" class="e-dock-item" type="button" title="Nouveautés du Cabinet">
+        <span class="e-dock-item-icon" aria-hidden="true">🔔</span><span>Nouveautés</span>
+        <span id="e-updates-badge" class="e-updates-badge" hidden>0</span>
+      </button>
+      <button id="e-theme-btn" class="e-dock-item" type="button" title="Couleur du néon">
+        <span id="e-theme-dot" class="e-dock-item-icon e-theme-dot" aria-hidden="true"></span><span>Couleur</span>
+      </button>
+      <button id="e-request-book-btn" class="e-dock-item" type="button"><span class="e-dock-item-icon" aria-hidden="true">📖</span><span>Demander un livre</span></button>
+      <div id="e-dock-admin-sep" class="e-dock-sep" hidden></div>
+      <button id="e-publish-update-btn" class="e-dock-item" type="button" hidden><span class="e-dock-item-icon" aria-hidden="true">📰</span><span>+ Nouveauté</span></button>
+      <button id="e-add-book-btn" class="e-dock-item" type="button" hidden><span class="e-dock-item-icon" aria-hidden="true">📕</span><span>+ Ajouter un livre</span></button>
+      <button id="e-book-requests-btn" class="e-dock-item" type="button" hidden><span class="e-dock-item-icon" aria-hidden="true">📋</span><span>Demandes des lecteurs</span></button>
+      <button id="e-visitors-btn" class="e-dock-item" type="button" hidden><span class="e-dock-item-icon" aria-hidden="true">👁</span><span>Derniers visiteurs</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Glitch/"bug" transition overlay — plays once, the instant a valid access
+     code is submitted from the decoy page, then the library appears directly
+     (no intermediate oath screen any more). -->
+<div id="e-glitch-overlay" aria-hidden="true">
+  <div class="e-glitch-slice e-glitch-slice-1"></div>
+  <div class="e-glitch-slice e-glitch-slice-2"></div>
+  <div class="e-glitch-slice e-glitch-slice-3"></div>
+  <div class="e-glitch-noise"></div>
 </div>
 
 <!-- Book detail modal -->
