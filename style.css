@@ -675,6 +675,7 @@ a { color: inherit; }
   .e-book-modal-grid img { max-width: 260px; margin: 0 auto; }
   .e-welcome { display: none; }
   .e-dock-panel { width: 240px; }
+  .e-dock-tab { min-height: 220px; }
 }
 
 /* ============================================================
@@ -1064,29 +1065,41 @@ html { scroll-behavior: smooth; }
    position:fixed isn't fought by the "#app > *" rule further up.
    A tab stays permanently visible at the edge; clicking it slides the
    panel out next to it. ============================================================ */
-.e-dock { position: fixed; top: 50%; transform: translateY(-50%); z-index: 60; display: flex; align-items: stretch; }
+/* The tab is the only element kept in normal flow — it alone determines
+   the dock's footprint, so it truly hugs the viewport edge (left:0 /
+   right:0). The panel is intentionally position:absolute and slides out
+   from behind the tab: earlier it was a flex sibling merely translated
+   off-screen, which still reserved its full width in the layout and
+   pushed the tab dozens of pixels inward — barely visible on a wide
+   desktop viewport but glaringly obvious on a narrow phone, where it
+   stranded both tabs near the horizontal center of the screen instead of
+   the edges. Keeping the panel out of flow fixes that at any width. */
+.e-dock { position: fixed; top: 50%; transform: translateY(-50%); z-index: 60; }
 .e-dock-left { left: 0; }
 .e-dock-right { right: 0; }
 
 .e-dock-tab {
-  width: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 2;
+  width: 28px; min-height: 260px; display: flex; align-items: center; justify-content: center;
   font-size: 16px; color: var(--tron-cyan-bright); cursor: pointer;
   background: linear-gradient(160deg, var(--tron-panel), #05080b); border: 1px solid var(--tron-cyan);
   transition: box-shadow .2s ease, color .2s ease;
 }
 .e-dock-tab:hover { color: var(--tron-cyan-bright); box-shadow: 0 0 16px color-mix(in srgb, var(--tron-cyan) 30%, transparent) inset; }
-.e-dock-left .e-dock-tab { order: 2; border-left: none; border-radius: 0 8px 8px 0; box-shadow: 4px 0 20px rgba(0,0,0,.5); }
-.e-dock-right .e-dock-tab { order: 1; border-right: none; border-radius: 8px 0 0 8px; box-shadow: -4px 0 20px rgba(0,0,0,.5); }
+.e-dock-left .e-dock-tab { border-left: none; border-radius: 0 8px 8px 0; box-shadow: 4px 0 20px rgba(0,0,0,.5); }
+.e-dock-right .e-dock-tab { border-right: none; border-radius: 8px 0 0 8px; box-shadow: -4px 0 20px rgba(0,0,0,.5); }
 
 .e-dock-panel {
+  position: absolute; top: 50%; z-index: 1;
   width: 280px; max-height: 74vh; overflow-y: auto;
   background: linear-gradient(160deg, var(--tron-panel), #05080b); border: 1px solid var(--tron-cyan);
   box-shadow: 0 20px 50px rgba(0,0,0,.6), 0 0 30px color-mix(in srgb, var(--tron-cyan) 10%, transparent);
+  opacity: 0; pointer-events: none;
   transition: transform .28s ease, opacity .2s ease;
 }
-.e-dock-left .e-dock-panel { order: 1; border-right: none; transform: translateX(-100%); opacity: 0; }
-.e-dock-right .e-dock-panel { order: 2; border-left: none; transform: translateX(100%); opacity: 0; }
-.e-dock.open .e-dock-panel { transform: translateX(0); opacity: 1; }
+.e-dock-left .e-dock-panel { left: 100%; border-left: none; transform: translateY(-50%) translateX(-100%); }
+.e-dock-right .e-dock-panel { right: 100%; border-right: none; transform: translateY(-50%) translateX(100%); }
+.e-dock.open .e-dock-panel { transform: translateY(-50%) translateX(0); opacity: 1; pointer-events: auto; }
 .e-dock-panel-inner { padding: 20px 18px; }
 
 .e-dock-item {
@@ -1104,6 +1117,7 @@ html { scroll-behavior: smooth; }
 @media (max-width: 640px) {
   .e-dock-panel { width: 220px; }
   .e-dock-panel-inner { padding: 16px 14px; }
+  .e-dock-tab { min-height: 190px; }
 }
 
 /* ============================================================

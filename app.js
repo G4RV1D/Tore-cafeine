@@ -39,8 +39,19 @@
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
-  function show(el) { el.hidden = false; }
-  function hide(el) { el.hidden = true; }
+  // Defensive: if a deploy ever ships app.js ahead of index.html (or vice
+  // versa), a missing element must never crash enterLibrary() mid-flight and
+  // leave the page stuck on a blank #app. Warn loudly instead of throwing.
+  function show(el) {
+    if (!el) { console.warn("[CDI] show(): élément introuvable — index.html et app.js sont-ils bien de la même version ?"); return; }
+    el.hidden = false;
+  }
+  function hide(el) { if (el) el.hidden = true; }
+  function setHidden(sel, val) {
+    const el = $(sel);
+    if (!el) { console.warn(`[CDI] élément "${sel}" introuvable — index.html et app.js sont-ils bien de la même version ?`); return; }
+    el.hidden = val;
+  }
 
   function openModal(id) { show($("#" + id)); }
   function closeModal(id) { hide($("#" + id)); }
@@ -470,12 +481,13 @@
     show($("#app"));
     show($("#e-dock-left"));
     show($("#e-dock-right"));
-    $("#e-welcome").textContent = state.name ? `Bienvenue, ${state.name}` : "";
-    $("#e-add-book-btn").hidden = state.role !== "admin";
-    $("#e-book-requests-btn").hidden = state.role !== "admin";
-    $("#e-visitors-btn").hidden = state.role !== "admin";
-    $("#e-publish-update-btn").hidden = state.role !== "admin";
-    $("#e-dock-admin-sep").hidden = state.role !== "admin";
+    const welcomeEl = $("#e-welcome");
+    if (welcomeEl) welcomeEl.textContent = state.name ? `Bienvenue, ${state.name}` : "";
+    setHidden("#e-add-book-btn", state.role !== "admin");
+    setHidden("#e-book-requests-btn", state.role !== "admin");
+    setHidden("#e-visitors-btn", state.role !== "admin");
+    setHidden("#e-publish-update-btn", state.role !== "admin");
+    setHidden("#e-dock-admin-sep", state.role !== "admin");
     updateStatsDisplay();
     show($("#e-header"));
     show($("#e-library-content"));
@@ -494,8 +506,8 @@
     // decoy page for the next visitor
     hide($("#e-dock-left"));
     hide($("#e-dock-right"));
-    $("#e-dock-left").classList.remove("open");
-    $("#e-dock-right").classList.remove("open");
+    $("#e-dock-left")?.classList.remove("open");
+    $("#e-dock-right")?.classList.remove("open");
   }
   $("#e-logout").addEventListener("click", leaveLibrary);
 
