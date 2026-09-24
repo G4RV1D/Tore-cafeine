@@ -222,7 +222,8 @@
           <h4 id="bm-extract-title" hidden>Extrait</h4>
           <p id="bm-extract" class="e-extract"></p>
           <div class="e-book-modal-actions">
-            <a id="bm-download" class="e-btn e-btn-gold" href="#" download>Télécharger l'ebook</a>
+            <button id="bm-read-btn" class="e-btn e-btn-gold" type="button">Lire en ligne</button>
+            <a id="bm-download" class="e-btn e-btn-ghost" href="#" download>Télécharger l'ebook</a>
             <button id="bm-edit-btn" class="e-btn e-btn-ghost" type="button" hidden>Modifier les informations</button>
             <button id="bm-delete-btn" class="e-btn e-btn-danger" type="button" hidden>Supprimer ce livre</button>
           </div>
@@ -360,6 +361,148 @@
   </div>
 </div>
 
+<!-- E-reader — reads EPUB files in the browser, with Kindle-style comfort settings -->
+<div id="reader-modal" class="reader-overlay" hidden>
+  <div class="reader-frame">
+    <header class="reader-topbar">
+      <button class="reader-icon-btn" id="reader-close" type="button" title="Fermer la lecture">&times;</button>
+      <div class="reader-title-group">
+        <span id="reader-book-title" class="reader-book-title"></span>
+        <span id="reader-loc-label" class="reader-loc-label"></span>
+      </div>
+      <div class="reader-topbar-actions">
+        <button class="reader-icon-btn" id="reader-toc-btn" type="button" title="Table des matières">☰</button>
+        <button class="reader-icon-btn" id="reader-bookmark-btn" type="button" title="Marquer cette page">☆</button>
+        <button class="reader-icon-btn" id="reader-bookmarks-list-btn" type="button" title="Mes marque-pages">🔖</button>
+        <button class="reader-icon-btn" id="reader-settings-btn" type="button" title="Réglages de lecture">Aa</button>
+        <a id="reader-download" class="reader-icon-btn" href="#" download title="Télécharger l'ebook">⭳</a>
+      </div>
+    </header>
+
+    <div class="reader-body">
+      <button class="reader-nav-zone reader-nav-prev" id="reader-prev" type="button" aria-label="Page précédente">‹</button>
+      <div class="reader-viewer-wrap">
+        <div id="reader-viewer" class="reader-viewer"></div>
+        <div id="reader-warmth-overlay" class="reader-warmth-overlay"></div>
+      </div>
+      <button class="reader-nav-zone reader-nav-next" id="reader-next" type="button" aria-label="Page suivante">›</button>
+      <p id="reader-loading" class="reader-loading">Ouverture du livre…</p>
+      <div id="reader-unsupported" class="reader-unsupported" hidden>
+        <p>La lecture en ligne n'est disponible que pour les fichiers au format EPUB.</p>
+        <p>Ce livre n'est pas dans ce format — utilise le bouton de téléchargement pour le lire avec ton application habituelle.</p>
+      </div>
+    </div>
+
+    <footer class="reader-bottombar">
+      <input type="range" id="reader-progress" class="reader-progress" min="0" max="1000" value="0" />
+      <span id="reader-progress-label" class="reader-progress-label">0 %</span>
+    </footer>
+
+    <!-- Settings panel — Kindle-style "Aa" menu -->
+    <div id="reader-settings-panel" class="reader-panel" hidden>
+      <div class="reader-panel-head">
+        <h4>Réglages de lecture</h4>
+        <button class="reader-icon-btn" type="button" data-panel-close>&times;</button>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Taille du texte</label>
+        <div class="reader-stepper">
+          <button type="button" id="reader-font-minus">A−</button>
+          <span id="reader-font-size-label">100 %</span>
+          <button type="button" id="reader-font-plus">A+</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Police</label>
+        <div class="reader-chip-group" id="reader-font-family-group">
+          <button type="button" data-font="original">Originale</button>
+          <button type="button" data-font="serif">Serif</button>
+          <button type="button" data-font="sans">Sans-serif</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Interligne</label>
+        <div class="reader-chip-group" id="reader-line-height-group">
+          <button type="button" data-lh="compact">Serré</button>
+          <button type="button" data-lh="normal">Normal</button>
+          <button type="button" data-lh="relaxed">Large</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Marges</label>
+        <div class="reader-chip-group" id="reader-margin-group">
+          <button type="button" data-margin="narrow">Étroites</button>
+          <button type="button" data-margin="normal">Normales</button>
+          <button type="button" data-margin="wide">Larges</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Justifier le texte</label>
+        <label class="reader-switch">
+          <input type="checkbox" id="reader-justify-toggle" />
+          <span></span>
+        </label>
+      </div>
+
+      <div class="reader-setting-row">
+        <label>Défilement</label>
+        <div class="reader-chip-group" id="reader-scroll-group">
+          <button type="button" data-scroll="paginated">Pages</button>
+          <button type="button" data-scroll="scrolled">Continu</button>
+        </div>
+      </div>
+
+      <h4 class="reader-panel-subhead">Confort visuel</h4>
+
+      <div class="reader-setting-row">
+        <label>Thème de la page</label>
+        <div class="reader-theme-group" id="reader-theme-group">
+          <button type="button" class="reader-swatch reader-swatch-light" data-theme="light" title="Clair"></button>
+          <button type="button" class="reader-swatch reader-swatch-sepia" data-theme="sepia" title="Sépia"></button>
+          <button type="button" class="reader-swatch reader-swatch-dark" data-theme="dark" title="Sombre"></button>
+          <button type="button" class="reader-swatch reader-swatch-black" data-theme="black" title="Noir"></button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row reader-setting-row-col">
+        <label>Lumière chaude (filtre anti-lumière bleue)</label>
+        <input type="range" id="reader-warmth-range" min="0" max="100" value="0" />
+      </div>
+
+      <div class="reader-setting-row reader-setting-row-col">
+        <label>Luminosité de la page</label>
+        <input type="range" id="reader-brightness-range" min="40" max="100" value="100" />
+      </div>
+    </div>
+
+    <!-- Table of contents panel -->
+    <div id="reader-toc-panel" class="reader-panel" hidden>
+      <div class="reader-panel-head">
+        <h4>Table des matières</h4>
+        <button class="reader-icon-btn" type="button" data-panel-close>&times;</button>
+      </div>
+      <div id="reader-toc-list" class="reader-toc-list"></div>
+    </div>
+
+    <!-- Bookmarks panel -->
+    <div id="reader-bookmarks-panel" class="reader-panel" hidden>
+      <div class="reader-panel-head">
+        <h4>Mes marque-pages</h4>
+        <button class="reader-icon-btn" type="button" data-panel-close>&times;</button>
+      </div>
+      <div id="reader-bookmarks-list" class="reader-bookmarks-list"></div>
+      <p id="reader-bookmarks-empty" class="d-fine">Aucun marque-page pour ce livre pour l'instant. Clique sur l'étoile ☆ en haut pour en ajouter un ici.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
 <script src="config.js?v=1"></script>
 <script src="app.js?v=1"></script>
 </body>
