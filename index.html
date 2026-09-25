@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=1" />
+<link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
 
@@ -151,7 +151,7 @@
     <div class="e-wrap e-header-inner e-header-inner-minimal">
       <div id="e-header-actions" class="e-header-actions">
         <span id="e-welcome" class="e-welcome"></span>
-        <button id="e-logout" class="e-btn e-btn-copper">Larcin Effectué !</button>
+        <button id="e-logout" class="e-btn e-btn-copper">Déconnexion</button>
       </div>
     </div>
   </header>
@@ -285,6 +285,15 @@
       <label>Date de sortie
         <input type="text" name="release_date" maxlength="50" placeholder="2014 ou 12/03/2014" />
       </label>
+      <div class="e-form-row">
+        <label>Saga / série (facultatif)
+          <input type="text" name="series_name" maxlength="200" placeholder="ex. Les Chats" list="series-suggestions" />
+        </label>
+        <label>N° dans la saga
+          <input type="number" name="series_order" min="0" max="999" placeholder="ex. 2" />
+        </label>
+      </div>
+      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout.</p>
       <label>Tags (séparés par des virgules)
         <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
       </label>
@@ -384,6 +393,16 @@
       <label>Date de sortie
         <input type="text" name="release_date" maxlength="50" placeholder="2014 ou 12/03/2014" />
       </label>
+      <div class="e-form-row">
+        <label>Saga / série (facultatif)
+          <input type="text" name="series_name" maxlength="200" placeholder="ex. Les Chats" list="series-suggestions" />
+          <datalist id="series-suggestions"></datalist>
+        </label>
+        <label>N° dans la saga
+          <input type="number" name="series_order" min="0" max="999" placeholder="ex. 2" />
+        </label>
+      </div>
+      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout.</p>
       <label>Tags (séparés par des virgules)
         <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
       </label>
@@ -605,7 +624,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
-<script src="config.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="config.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

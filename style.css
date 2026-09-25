@@ -535,6 +535,11 @@ a { color: inherit; }
   outline: none; border-color: var(--tron-cyan); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tron-cyan) 15%, transparent);
 }
 #add-book-form input[type="file"], #edit-book-form input[type="file"] { padding: 8px; }
+/* Saga/série + n° de tome side by side, matching the theme of the fields around them */
+.e-form-row { display: flex; gap: 14px; }
+.e-form-row label { flex: 1 1 0; min-width: 0; }
+.e-form-row label:last-child { flex: 0 0 110px; }
+@media (max-width: 480px) { .e-form-row { flex-direction: column; gap: 0; } .e-form-row label:last-child { flex-basis: auto; } }
 #add-book-form button, #edit-book-form button, #request-book-form button, #publish-update-form button {
   font-family: var(--tron-font-body); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; font-size: 13px;
   background: linear-gradient(180deg, var(--tron-cyan-fill-top), var(--tron-cyan-fill-bottom)); color: #041014; border: 1px solid var(--tron-cyan-deep);
@@ -553,7 +558,7 @@ a { color: inherit; }
   background: rgba(255,77,109,.12); border-color: var(--tron-danger); color: var(--tron-danger-bright); box-shadow: 0 0 14px rgba(255,77,109,.22);
 }
 
-/* "Larcin Effectué !" — a solid steel-and-cyan panel so it reads as the
+/* "Déconnexion" — a solid steel-and-cyan panel so it reads as the
    clear "exit" action against the outlined buttons around it */
 .e-btn-copper {
   background: linear-gradient(180deg, #2c4250, #0e1620);

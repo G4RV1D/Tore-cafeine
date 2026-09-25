@@ -529,6 +529,60 @@
     }
   }
 
+  // Groups every tome of the same saga next to each other, in ascending
+  // "N° dans la saga" order, instead of leaving them scattered wherever their
+  // individual add date happens to place them. Solo books (no series_name, or
+  // the only book with that series_name in the current list) are left exactly
+  // where the server put them (created_at DESC). A series block is anchored
+  // at the position of its most-recently-added tome, since `books` arrives
+  // newest-first: that's the smallest index among that series' books.
+  function sortBooksGrouped(books) {
+    const seriesKey = (b) => (b.series_name || "").trim().toLowerCase();
+    const countBySeries = {};
+    books.forEach((b) => {
+      const key = seriesKey(b);
+      if (key) countBySeries[key] = (countBySeries[key] || 0) + 1;
+    });
+    const anchorIndex = {};
+    books.forEach((b, i) => {
+      const key = seriesKey(b);
+      if (key && countBySeries[key] > 1 && !(key in anchorIndex)) anchorIndex[key] = i;
+    });
+    const withSortKeys = books.map((b, i) => {
+      const key = seriesKey(b);
+      const grouped = key && countBySeries[key] > 1;
+      const order = Number(b.series_order);
+      return {
+        book: b,
+        primary: grouped ? anchorIndex[key] : i,
+        secondary: grouped ? (Number.isFinite(order) ? order : 9999) : 0,
+      };
+    });
+    withSortKeys.sort((a, b) => (a.primary - b.primary) || (a.secondary - b.secondary));
+    return withSortKeys.map((x) => x.book);
+  }
+
+  // Picks the `limit` most-recently-added books for the "Derniers ajouts"
+  // rail, but if that cutoff would slice a saga in half, pulls in the
+  // missing tome(s) too — a series should never be shown incomplete just
+  // because one of its volumes landed one slot past the top-N line.
+  function pickRecentGrouped(books, limit) {
+    const seriesKey = (b) => (b.series_name || "").trim().toLowerCase();
+    const countBySeries = {};
+    books.forEach((b) => {
+      const key = seriesKey(b);
+      if (key) countBySeries[key] = (countBySeries[key] || 0) + 1;
+    });
+    const recentIds = new Set(books.slice(0, limit).map((b) => b.id));
+    const recentSeries = new Set();
+    books.forEach((b) => {
+      const key = seriesKey(b);
+      if (key && countBySeries[key] > 1 && recentIds.has(b.id)) recentSeries.add(key);
+    });
+    const picked = books.filter((b) => recentIds.has(b.id) || recentSeries.has(seriesKey(b)));
+    return sortBooksGrouped(picked);
+  }
+
   async function loadBooks() {
     renderSkeletonGrid(10);
     const params = new URLSearchParams({ code: state.code });
@@ -537,7 +591,7 @@
       const data = await api("/api/books?" + params.toString(), {
         headers: { "x-access-code": state.code },
       });
-      state.books = data.books || [];
+      state.books = sortBooksGrouped(data.books || []);
       state.genres = data.genres || [];
       // the total-library count should reflect ALL books, not the active genre
       // filter — only update it from an unfiltered fetch
@@ -548,6 +602,7 @@
       renderGenres();
       renderGrid();
       fillGenreSuggestions();
+      fillSeriesSuggestions();
     } catch (err) {
       if (String(err.message).includes("401")) leaveLibrary();
     }
@@ -575,6 +630,15 @@
     const dl = $("#genre-suggestions");
     if (!dl) return;
     dl.innerHTML = state.genres.map((g) => `<option value="${escapeHtml(g)}">`).join("");
+  }
+
+  function fillSeriesSuggestions() {
+    const dl = $("#series-suggestions");
+    if (!dl) return;
+    const names = Array.from(new Set(
+      state.books.map((b) => (b.series_name || "").trim()).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b));
+    dl.innerHTML = names.map((n) => `<option value="${escapeHtml(n)}">`).join("");
   }
 
   function matchesSearch(book, q) {
@@ -621,7 +685,7 @@
       // "total books in the library" stat regardless of the active genre
       state.totalBooks = (data.books || []).length;
       updateStatsDisplay();
-      renderRecent((data.books || []).slice(0, 10));
+      renderRecent(pickRecentGrouped(data.books || [], 10));
     } catch (err) {
       // silent — the rail simply stays empty if this fails
     }
@@ -715,6 +779,8 @@
     form.author.value = b.author || "";
     form.genre.value = b.genre || "";
     form.release_date.value = b.release_date || "";
+    form.series_name.value = b.series_name || "";
+    form.series_order.value = (b.series_order === null || b.series_order === undefined) ? "" : b.series_order;
     form.tags.value = (b.tags || []).join(", ");
     form.summary.value = b.summary || "";
     form.extract.value = b.extract || "";
