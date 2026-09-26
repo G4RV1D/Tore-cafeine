@@ -668,6 +668,21 @@
     return a || "￿";
   }
 
+  // "Les Gardiens du Nord — Tome 4 / Spin-off Tome 1" — built from
+  // series_name + series_order, with the optional series_note (for a book
+  // that's simultaneously part of a derived spin-off/duology) appended after
+  // a slash. Returns "" when the book has no series_name at all.
+  function formatSeriesLabel(book) {
+    const name = (book.series_name || "").trim();
+    if (!name) return "";
+    const order = Number(book.series_order);
+    let label = name;
+    if (Number.isFinite(order)) label += ` — Tome ${order}`;
+    const note = (book.series_note || "").trim();
+    if (note) label += ` / ${note}`;
+    return label;
+  }
+
   // Picks the `limit` most-recently-added books for the "Derniers ajouts"
   // rail, but if that cutoff would slice a saga in half, pulls in the
   // missing tome(s) too — a series should never be shown incomplete just
@@ -764,10 +779,12 @@
       card.className = "e-card";
       card.type = "button";
       card.style.setProperty("--i", i);
+      const seriesLabel = formatSeriesLabel(book);
       card.innerHTML = `
         <div class="e-card-cover">${book.cover_url ? `<img loading="lazy" src="${API}${book.cover_url}" alt="Couverture de ${escapeHtml(book.title)}" />` : ""}</div>
         <div class="e-card-title">${escapeHtml(book.title)}</div>
         <div class="e-card-author">${escapeHtml(book.author || "")}</div>
+        ${seriesLabel ? `<div class="e-card-series">${escapeHtml(seriesLabel)}</div>` : ""}
       `;
       card.addEventListener("click", () => openBook(book.id));
       wireTilt(card);
@@ -838,6 +855,9 @@
       $("#bm-cover").alt = "Couverture de " + b.title;
       $("#bm-title").textContent = b.title;
       $("#bm-author").textContent = b.author || "";
+      const seriesEl = $("#bm-series");
+      const seriesLabel = formatSeriesLabel(b);
+      if (seriesEl) { seriesEl.textContent = seriesLabel; seriesEl.hidden = !seriesLabel; }
       $("#bm-date").textContent = b.release_date || "Date inconnue";
       $("#bm-genre").textContent = b.genre || "";
       $("#bm-summary").textContent = b.summary || "Pas de résumé pour ce livre.";
@@ -887,6 +907,7 @@
     form.release_date.value = b.release_date || "";
     form.series_name.value = b.series_name || "";
     form.series_order.value = (b.series_order === null || b.series_order === undefined) ? "" : b.series_order;
+    form.series_note.value = b.series_note || "";
     form.tags.value = (b.tags || []).join(", ");
     form.summary.value = b.summary || "";
     form.extract.value = b.extract || "";

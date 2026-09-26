@@ -431,6 +431,13 @@ a { color: inherit; }
   font-family: var(--tron-font-mono); font-style: normal; font-size: 12px; color: var(--tron-text-dimmer); margin-top: 3px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* saga/tome badge — only rendered when the book has a series_name; kept to
+   one line so it never pushes card heights out of alignment with each other */
+.e-card-series {
+  display: block; margin-top: 4px; font-family: var(--tron-font-body); font-weight: 700; font-size: 10.5px;
+  color: var(--tron-cyan-bright); text-transform: uppercase; letter-spacing: .8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .e-empty { color: var(--tron-text-dimmer); font-style: normal; margin-top: 60px; text-align: center; font-size: 17px; font-family: var(--tron-font-body); }
 .e-empty::before { content: "◆"; display: block; font-size: 22px; color: var(--tron-border-strong); margin-bottom: 10px; }
@@ -507,6 +514,11 @@ a { color: inherit; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .e-book-author { margin: 0; color: var(--tron-text-dim); font-style: normal; font-family: var(--tron-font-body); font-size: 16px; }
+.e-book-series {
+  display: inline-block; margin-top: 8px; font-family: var(--tron-font-body); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1.3px;
+  color: var(--tron-cyan-bright); border: 1px solid color-mix(in srgb, var(--tron-cyan) 45%, transparent); border-radius: 999px;
+  padding: 4px 12px; background: color-mix(in srgb, var(--tron-cyan) 8%, transparent);
+}
 .e-book-meta { color: var(--tron-text-dimmer); font-size: 12.5px; margin: 8px 0 4px; font-family: var(--tron-font-mono); letter-spacing: 1px; text-transform: uppercase; }
 .e-book-modal-info h4 {
   font-family: var(--tron-font-body); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: var(--tron-text-dim);

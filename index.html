@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
 
@@ -258,6 +258,7 @@
         <div class="e-book-modal-info">
           <h2 id="bm-title"></h2>
           <p id="bm-author" class="e-book-author"></p>
+          <span id="bm-series" class="e-book-series" hidden></span>
           <p class="e-book-meta">
             <span id="bm-date"></span> · <span id="bm-genre"></span>
           </p>
@@ -302,10 +303,14 @@
           <input type="text" name="series_name" maxlength="200" placeholder="ex. Les Chats" list="series-suggestions" />
         </label>
         <label>N° dans la saga
-          <input type="number" name="series_order" min="0" max="999" placeholder="ex. 2" />
+          <input type="number" name="series_order" min="0" max="999" step="0.5" placeholder="ex. 2 ou 1.5" />
         </label>
       </div>
-      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout.</p>
+      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout. Pour un tome intermédiaire (à lire entre le 1 et le 2 par exemple), utilise un nombre à virgule comme 1.5.</p>
+      <label>Précision sur le tome (facultatif)
+        <input type="text" name="series_note" maxlength="200" placeholder="ex. Spin-off Tome 1" />
+      </label>
+      <p class="d-fine">Pour une duologie/trilogie dérivée (ex. le tome 4 de la saga principale qui est aussi le tome 1 d'un spin-off), renseigne le n° dans la saga principale ci-dessus, puis précise ici l'autre appartenance : ça s'affichera comme « Tome 4 / Spin-off Tome 1 ».</p>
       <label>Tags (séparés par des virgules)
         <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
       </label>
@@ -411,10 +416,14 @@
           <datalist id="series-suggestions"></datalist>
         </label>
         <label>N° dans la saga
-          <input type="number" name="series_order" min="0" max="999" placeholder="ex. 2" />
+          <input type="number" name="series_order" min="0" max="999" step="0.5" placeholder="ex. 2 ou 1.5" />
         </label>
       </div>
-      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout.</p>
+      <p class="d-fine">Renseigne ces deux champs pour que les tomes d'une même saga se rangent automatiquement les uns à côté des autres, dans l'ordre, plutôt que par date d'ajout. Pour un tome intermédiaire (à lire entre le 1 et le 2 par exemple), utilise un nombre à virgule comme 1.5.</p>
+      <label>Précision sur le tome (facultatif)
+        <input type="text" name="series_note" maxlength="200" placeholder="ex. Spin-off Tome 1" />
+      </label>
+      <p class="d-fine">Pour une duologie/trilogie dérivée (ex. le tome 4 de la saga principale qui est aussi le tome 1 d'un spin-off), renseigne le n° dans la saga principale ci-dessus, puis précise ici l'autre appartenance : ça s'affichera comme « Tome 4 / Spin-off Tome 1 ».</p>
       <label>Tags (séparés par des virgules)
         <input type="text" name="tags" maxlength="300" placeholder="tome1, saga, best-seller" />
       </label>
@@ -637,6 +646,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
