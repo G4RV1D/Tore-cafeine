@@ -637,9 +637,13 @@
       if (key) countBySeries[key] = (countBySeries[key] || 0) + 1;
     });
     const anchorPrimary = {};
+    const anchorIndex = {};
     books.forEach((b, i) => {
       const key = seriesKey(b);
-      if (key && countBySeries[key] > 1 && !(key in anchorPrimary)) anchorPrimary[key] = keyFn(b, i);
+      if (key && countBySeries[key] > 1 && !(key in anchorPrimary)) {
+        anchorPrimary[key] = keyFn(b, i);
+        anchorIndex[key] = i;
+      }
     });
     const withSortKeys = books.map((b, i) => {
       const key = seriesKey(b);
@@ -648,6 +652,14 @@
       return {
         book: b,
         primary: grouped ? anchorPrimary[key] : keyFn(b, i),
+        // Distinguishes different sagas (or standalone books) that tie on
+        // `primary` — e.g. two different series by the same author, whose
+        // anchor primary key (the author name) is identical. Without this,
+        // the sort would fall through straight to `secondary` (the tome
+        // number) and interleave every saga's "Tome 1"s together, then
+        // every "Tome 2", etc, regardless of which saga they belong to.
+        group: grouped ? `s:${key}` : `b:${i}`,
+        groupOrder: grouped ? anchorIndex[key] : i,
         secondary: grouped ? (Number.isFinite(order) ? order : 9999) : 0,
       };
     });
@@ -655,7 +667,9 @@
       const cmp = (typeof a.primary === "string" || typeof b.primary === "string")
         ? String(a.primary).localeCompare(String(b.primary), "fr", { sensitivity: "base" })
         : a.primary - b.primary;
-      return cmp || (a.secondary - b.secondary);
+      if (cmp) return cmp;
+      if (a.group !== b.group) return a.groupOrder - b.groupOrder;
+      return a.secondary - b.secondary;
     });
     return withSortKeys.map((x) => x.book);
   }
