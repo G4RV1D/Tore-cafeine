@@ -473,6 +473,92 @@
   // just started (or just finished) updates the rail without a full reload
   window.__cdiRefreshResume = renderResume;
 
+  // ---------- "Un moment d'honnêteté" — one reflection prompt per session ----------
+  // Static carousel: a single random question is drawn once per browser
+  // session (kept in sessionStorage so it survives a page refresh but not a
+  // new session) and only changes when the reader clicks "Suivant".
+  const HONESTY_QUESTIONS = [
+    { theme: "Relations", q: "Est-ce que je me sens vraiment écouté(e) par les gens qui comptent pour moi ?" },
+    { theme: "Relations", q: "Qu'est-ce que j'évite de dire à quelqu'un que j'aime ?" },
+    { theme: "Relations", q: "Est-ce que je donne autant que je reçois dans mes relations les plus proches ?" },
+    { theme: "Relations", q: "Quelle relation me draine, et pourquoi est-ce que je la maintiens ?" },
+    { theme: "Relations", q: "Ai-je vraiment pardonné à quelqu'un que je prétends avoir pardonné ?" },
+    { theme: "Relations", q: "Qu'est-ce que je recherche chez les autres : de la compagnie, ou de la validation ?" },
+    { theme: "Relations", q: "Qu'est-ce que je n'ai jamais osé demander à quelqu'un que j'aime ?" },
+    { theme: "Gratitude", q: "Quelle personne n'ai-je jamais assez remerciée ?" },
+    { theme: "Gratitude", q: "Qu'est-ce qui, dans mon quotidien le plus ordinaire, mérite d'être remarqué aujourd'hui ?" },
+    { theme: "Gratitude", q: "Quelle difficulté passée m'a, avec le recul, rendu service ?" },
+    { theme: "Gratitude", q: "De quel confort matériel est-ce que je profite sans y penser ?" },
+    { theme: "Gratitude", q: "Quelle qualité chez moi ai-je oublié d'apprécier ?" },
+    { theme: "Gratitude", q: "Qu'est-ce que je continuerais à faire même si personne ne le remarquait jamais ?" },
+    { theme: "Spiritualité", q: "Est-ce que mes actions du quotidien reflètent ce en quoi je dis croire ?" },
+    { theme: "Spiritualité", q: "Qu'est-ce que le silence m'apprend quand je lui laisse vraiment de la place ?" },
+    { theme: "Spiritualité", q: "Quelle certitude ancienne ai-je abandonnée sans jamais me le formuler clairement ?" },
+    { theme: "Spiritualité", q: "Où est-ce que je cherche du sens quand tout semble absurde ?" },
+    { theme: "Spiritualité", q: "Qu'est-ce qui, en moi, dépasse ce que je peux expliquer ou contrôler ?" },
+    { theme: "Perspective", q: "Dans dix ans, qu'est-ce qui, aujourd'hui, me semblera avoir eu très peu d'importance ?" },
+    { theme: "Perspective", q: "Quelle histoire est-ce que je me raconte sur ma propre vie, et est-elle vraie ?" },
+    { theme: "Perspective", q: "Qu'est-ce que je verrais différemment si j'étais quelqu'un d'autre qui observait ma situation ?" },
+    { theme: "Perspective", q: "Quel problème actuel grossis-je plus qu'il ne le mérite ?" },
+    { theme: "Perspective", q: "Qu'est-ce que je considérerais comme une réussite si personne d'autre que moi ne le savait jamais ?" },
+    { theme: "Perspective", q: "Qu'est-ce que je ferais aujourd'hui si je savais que je ne peux pas échouer ?" },
+    { theme: "Conscience de soi", q: "Quelle émotion est-ce que j'évite systématiquement de ressentir ?" },
+    { theme: "Conscience de soi", q: "Dans quelle situation est-ce que je deviens quelqu'un que je n'aime pas ?" },
+    { theme: "Conscience de soi", q: "Qu'est-ce que je fais par habitude plutôt que par choix conscient ?" },
+    { theme: "Conscience de soi", q: "Quel jugement que je porte sur les autres en dit-il long sur moi-même ?" },
+    { theme: "Conscience de soi", q: "Qu'est-ce que je fuis en restant constamment occupé(e) ?" },
+    { theme: "Conscience de soi", q: "Quelle version de moi-même ai-je laissée derrière, et me manque-t-elle ?" },
+    { theme: "Conscience de soi", q: "Qu'est-ce que je fais pour être aimé(e) plutôt que parce que ça me correspond vraiment ?" },
+    { theme: "Conscience de soi", q: "Quelle part de moi-même est-ce que je montre le moins souvent, et pourquoi ?" },
+    { theme: "Carrière et développement", q: "Est-ce que je travaille pour construire quelque chose, ou pour fuir quelque chose ?" },
+    { theme: "Carrière et développement", q: "Quelle compétence est-ce que je repousse toujours à plus tard par peur de ne pas être à la hauteur ?" },
+    { theme: "Carrière et développement", q: "Si l'argent n'entrait pas en compte, est-ce que je ferais encore ce métier ?" },
+    { theme: "Carrière et développement", q: "Qu'est-ce que je considère comme un échec alors que ça m'a fait progresser ?" },
+    { theme: "Carrière et développement", q: "Quelle limite professionnelle est-ce que je n'ose pas poser ?" },
+    { theme: "Carrière et développement", q: "Qu'est-ce que je voudrais qu'on dise de mon travail dans vingt ans ?" },
+    { theme: "Santé et énergie", q: "À quel moment de la journée est-ce que je me sens vraiment moi-même ?" },
+    { theme: "Santé et énergie", q: "Qu'est-ce que mon corps essaie de me dire depuis un moment, sans que je l'écoute ?" },
+    { theme: "Santé et énergie", q: "Qu'est-ce que je fais par épuisement plutôt que par envie ?" },
+    { theme: "Santé et énergie", q: "Quelle habitude sais-je nuisible, mais que je continue quand même ?" },
+    { theme: "Santé et énergie", q: "Qu'est-ce qui me redonne vraiment de l'énergie, et à quand remonte la dernière fois où je l'ai fait ?" },
+    { theme: "Santé et énergie", q: "Est-ce que je me repose vraiment, ou est-ce que je fuis simplement dans autre chose ?" },
+    { theme: "Bilan hebdomadaire", q: "Qu'est-ce que j'ai remis à plus tard cette semaine, et pourquoi ?" },
+    { theme: "Bilan hebdomadaire", q: "Quel moment de cette semaine choisirais-je de revivre ?" },
+    { theme: "Bilan hebdomadaire", q: "Ai-je tenu une promesse que je m'étais faite à moi-même cette semaine ?" },
+    { theme: "Bilan hebdomadaire", q: "Qu'est-ce qui m'a coûté le plus d'énergie cette semaine, et est-ce que ça en valait la peine ?" },
+    { theme: "Bilan hebdomadaire", q: "Quelle conversation de cette semaine continue de tourner dans ma tête ?" },
+    { theme: "Bilan hebdomadaire", q: "Qu'est-ce que je ferais différemment si je revivais cette semaine ?" },
+  ];
+  const HONESTY_SESSION_KEY = "cdi_honesty_question_index";
+
+  function renderHonestyQuestion(index) {
+    const item = HONESTY_QUESTIONS[index];
+    if (!item) return;
+    const themeEl = $("#e-honesty-theme");
+    const questionEl = $("#e-honesty-question");
+    if (themeEl) themeEl.textContent = item.theme;
+    if (questionEl) questionEl.textContent = item.q;
+  }
+
+  function pickHonestyQuestion(opts) {
+    const forceNew = !!(opts && opts.forceNew);
+    let stored = null;
+    try { stored = sessionStorage.getItem(HONESTY_SESSION_KEY); } catch (e) { /* private browsing, etc. */ }
+    let index = Number(stored);
+    const hasValidStored = Number.isInteger(index) && index >= 0 && index < HONESTY_QUESTIONS.length;
+    if (!hasValidStored || forceNew) {
+      let next;
+      do {
+        next = Math.floor(Math.random() * HONESTY_QUESTIONS.length);
+      } while (HONESTY_QUESTIONS.length > 1 && hasValidStored && next === index);
+      index = next;
+      try { sessionStorage.setItem(HONESTY_SESSION_KEY, String(index)); } catch (e) { /* ignore */ }
+    }
+    renderHonestyQuestion(index);
+  }
+
+  $("#e-honesty-next")?.addEventListener("click", () => pickHonestyQuestion({ forceNew: true }));
+
   // ---------- switching screens ----------
   // No more oath screen: the library appears directly (behind the glitch
   // flicker when this follows a manual code entry — see playGlitchTransition).
@@ -489,6 +575,7 @@
     setHidden("#e-publish-update-btn", state.role !== "admin");
     setHidden("#e-dock-admin-sep", state.role !== "admin");
     updateStatsDisplay();
+    pickHonestyQuestion();
     show($("#e-header"));
     show($("#e-library-content"));
     loadUpdates(); // fetch in the background so the "nouveautés" badge is ready early
@@ -532,21 +619,27 @@
   // Groups every tome of the same saga next to each other, in ascending
   // "N° dans la saga" order, instead of leaving them scattered wherever their
   // individual add date happens to place them. Solo books (no series_name, or
-  // the only book with that series_name in the current list) are left exactly
-  // where the server put them (created_at DESC). A series block is anchored
-  // at the position of its most-recently-added tome, since `books` arrives
-  // newest-first: that's the smallest index among that series' books.
-  function sortBooksGrouped(books) {
+  // the only book with that series_name in the current list) are ordered by
+  // `primaryKeyFn`. A series block as a whole is anchored at the
+  // `primaryKeyFn` value of its first-appearing member (in the incoming
+  // array's own order) — e.g. with the default recency key that's its most
+  // recently added tome; with an author-name key it's naturally that
+  // series' author, so a saga still lands in the right alphabetical spot.
+  // `primaryKeyFn` defaults to preserving the server's own order (created_at
+  // DESC) — used for "Derniers ajouts". The main grid instead sorts by
+  // author name (see loadBooks()).
+  function sortBooksGrouped(books, primaryKeyFn) {
+    const keyFn = primaryKeyFn || ((b, i) => i);
     const seriesKey = (b) => (b.series_name || "").trim().toLowerCase();
     const countBySeries = {};
     books.forEach((b) => {
       const key = seriesKey(b);
       if (key) countBySeries[key] = (countBySeries[key] || 0) + 1;
     });
-    const anchorIndex = {};
+    const anchorPrimary = {};
     books.forEach((b, i) => {
       const key = seriesKey(b);
-      if (key && countBySeries[key] > 1 && !(key in anchorIndex)) anchorIndex[key] = i;
+      if (key && countBySeries[key] > 1 && !(key in anchorPrimary)) anchorPrimary[key] = keyFn(b, i);
     });
     const withSortKeys = books.map((b, i) => {
       const key = seriesKey(b);
@@ -554,12 +647,25 @@
       const order = Number(b.series_order);
       return {
         book: b,
-        primary: grouped ? anchorIndex[key] : i,
+        primary: grouped ? anchorPrimary[key] : keyFn(b, i),
         secondary: grouped ? (Number.isFinite(order) ? order : 9999) : 0,
       };
     });
-    withSortKeys.sort((a, b) => (a.primary - b.primary) || (a.secondary - b.secondary));
+    withSortKeys.sort((a, b) => {
+      const cmp = (typeof a.primary === "string" || typeof b.primary === "string")
+        ? String(a.primary).localeCompare(String(b.primary), "fr", { sensitivity: "base" })
+        : a.primary - b.primary;
+      return cmp || (a.secondary - b.secondary);
+    });
     return withSortKeys.map((x) => x.book);
+  }
+
+  // Sort key for the main grid: alphabetical by author name (trimmed,
+  // accent/case-insensitive via localeCompare above); books with no author
+  // listed sort to the very end rather than jumping to the front.
+  function authorSortKey(b) {
+    const a = (b.author || "").trim();
+    return a || "￿";
   }
 
   // Picks the `limit` most-recently-added books for the "Derniers ajouts"
@@ -591,7 +697,7 @@
       const data = await api("/api/books?" + params.toString(), {
         headers: { "x-access-code": state.code },
       });
-      state.books = sortBooksGrouped(data.books || []);
+      state.books = sortBooksGrouped(data.books || [], authorSortKey);
       state.genres = data.genres || [];
       // the total-library count should reflect ALL books, not the active genre
       // filter — only update it from an unfiltered fetch

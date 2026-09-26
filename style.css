@@ -327,6 +327,37 @@ a { color: inherit; }
   font-family: var(--tron-font-body); font-size: 11.5px; color: var(--tron-text-dim); text-transform: uppercase; letter-spacing: 1.3px;
 }
 
+/* ---------- "Un moment d'honnêteté" — one static reflection prompt per
+   session, with a manual "Suivant" to draw another. Sits between the stats
+   strip and the resume/recent rails. ---------- */
+.e-honesty {
+  border: 1px solid color-mix(in srgb, var(--tron-cyan) 30%, transparent); border-radius: 4px;
+  background: rgba(10,15,20,.5); padding: 22px 26px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tron-cyan) 6%, transparent), 0 0 14px color-mix(in srgb, var(--tron-cyan) 10%, transparent);
+}
+.e-honesty-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 14px; }
+.e-honesty-title {
+  font-family: var(--tron-font-body); font-weight: 700; font-size: 12.5px; color: var(--tron-text-dim); text-transform: uppercase; letter-spacing: 3px;
+}
+.e-honesty-theme {
+  font-family: var(--tron-font-body); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1.3px;
+  color: var(--tron-cyan-bright); border: 1px solid color-mix(in srgb, var(--tron-cyan) 45%, transparent); border-radius: 999px;
+  padding: 4px 12px; background: color-mix(in srgb, var(--tron-cyan) 8%, transparent);
+}
+.e-honesty-question {
+  font-family: var(--tron-font-display); font-style: italic; font-weight: 600; font-size: 21px; line-height: 1.4;
+  color: var(--tron-text); margin: 0 0 16px;
+}
+.e-honesty-foot { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 20px; }
+.e-honesty-hint { font-family: var(--tron-font-body); font-size: 12.5px; color: var(--tron-text-dimmer); line-height: 1.5; margin: 0; max-width: 62ch; }
+.e-honesty-foot .e-btn { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .e-honesty { padding: 18px 18px; }
+  .e-honesty-question { font-size: 18px; }
+  .e-honesty-foot { align-items: stretch; }
+  .e-honesty-foot .e-btn { width: 100%; }
+}
+
 /* ---------- rayons/genres + recherche (now inside the left dock panel) ---------- */
 .e-dock-heading {
   font-family: var(--tron-font-body); font-weight: 700; font-size: 12.5px; color: var(--tron-text-dim); text-transform: uppercase;
