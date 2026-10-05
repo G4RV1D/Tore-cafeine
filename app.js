@@ -387,19 +387,30 @@
   };
 
   // ---------- "reprendre où je me suis arrêté" — reuses the e-reader's own
-  // per-book localStorage progress (cdi_reader_book_<id>), scoped to this
-  // browser/visitor exactly like the neon theme preference ----------
-  const READER_KEY_PREFIX = "cdi_reader_book_";
+  // per-book localStorage progress (cdi_rb2_<code-hash>_<id>), scoped to the
+  // access code in use on this browser ----------
+  // Reading progress + bookmarks are scoped to the access code in use (each
+  // code = one person/e-mail), so two codes on the same browser never see
+  // each other's "resume" list or bookmarks. The code is hashed so the raw
+  // code never ends up inside a storage key name.
+  function readerScopeKey(code) {
+    const c = String(code || "");
+    let h = 5381;
+    for (let i = 0; i < c.length; i++) h = ((h * 33) ^ c.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function readerKeyPrefix() { return "cdi_rb2_" + readerScopeKey(state.code) + "_"; }
+  window.__cdiReaderKeyPrefix = readerKeyPrefix;
 
   function getResumeList() {
     const items = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || !key.startsWith(READER_KEY_PREFIX)) continue;
+      if (!key || !key.startsWith(readerKeyPrefix())) continue;
       let st;
       try { st = JSON.parse(localStorage.getItem(key)); } catch { continue; }
       if (!st || !st.lastCfi) continue;
-      const id = key.slice(READER_KEY_PREFIX.length);
+      const id = key.slice(readerKeyPrefix().length);
       const book = state.books.find((b) => String(b.id) === id);
       if (!book) continue; // not in the (currently loaded) library — skip
       items.push({ id, book, lastReadAt: st.lastReadAt || "" });
@@ -424,7 +435,7 @@
   // removes a book's saved reading position — it drops out of the resume
   // rail immediately (the section hides itself if it was the last one)
   function forgetResumeBook(id) {
-    try { localStorage.removeItem(READER_KEY_PREFIX + id); } catch {}
+    try { localStorage.removeItem(readerKeyPrefix() + id); } catch {}
     renderResume();
   }
 
@@ -1326,7 +1337,9 @@
   if (!$("#reader-modal")) return; // markup not present on this page
 
   const READER_SETTINGS_KEY = "cdi_reader_settings";
-  const readerBookKey = (id) => "cdi_reader_book_" + id;
+  // per-access-code scope (same prefix as the library's "resume" rail)
+  const readerBookKey = (id) =>
+    (typeof window.__cdiReaderKeyPrefix === "function" ? window.__cdiReaderKeyPrefix() : "cdi_rb2__") + id;
 
   const DEFAULT_SETTINGS = {
     fontScale: 100,
