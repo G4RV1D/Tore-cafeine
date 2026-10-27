@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6" />
+<link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
 
@@ -516,6 +516,7 @@
         <button class="reader-icon-btn" id="reader-toc-btn" type="button" title="Table des matières">☰</button>
         <button class="reader-icon-btn" id="reader-bookmark-btn" type="button" title="Marquer cette page">☆</button>
         <button class="reader-icon-btn" id="reader-bookmarks-list-btn" type="button" title="Mes marque-pages">🔖</button>
+        <button class="reader-icon-btn" id="reader-fullscreen-btn" type="button" title="Plein écran (touche F)">⛶</button>
         <button class="reader-icon-btn" id="reader-settings-btn" type="button" title="Réglages de lecture">Aa</button>
         <a id="reader-download" class="reader-icon-btn" href="#" download title="Télécharger l'ebook">⭳</a>
       </div>
@@ -523,9 +524,25 @@
 
     <div class="reader-body">
       <button class="reader-nav-zone reader-nav-prev" id="reader-prev" type="button" aria-label="Page précédente">‹</button>
-      <div class="reader-viewer-wrap">
-        <div id="reader-viewer" class="reader-viewer"></div>
+      <div id="reader-viewer-wrap" class="reader-viewer-wrap">
+        <div id="rb-book" class="rb-book">
+          <div class="rb-cover"></div>
+          <div id="rb-edge-l" class="rb-edge rb-edge-l"></div>
+          <div id="rb-edge-r" class="rb-edge rb-edge-r"></div>
+          <div class="rb-paper"></div>
+          <div id="reader-viewer" class="reader-viewer"></div>
+          <div class="rb-shade"><span class="rb-shade-l"></span><span class="rb-shade-r"></span></div>
+          <span id="rb-folio-l" class="rb-folio rb-folio-l"></span>
+          <span id="rb-folio-r" class="rb-folio rb-folio-r"></span>
+          <div id="rb-cast" class="rb-cast"></div>
+          <div id="rb-flap" class="rb-flap">
+            <div class="rb-flap-face rb-flap-front"></div>
+            <div class="rb-flap-face rb-flap-back"></div>
+          </div>
+          <div id="rb-touch" class="rb-touch"></div>
+        </div>
         <div id="reader-warmth-overlay" class="reader-warmth-overlay"></div>
+        <div id="rb-hint" class="rb-hint" hidden></div>
       </div>
       <button class="reader-nav-zone reader-nav-next" id="reader-next" type="button" aria-label="Page suivante">›</button>
       <p id="reader-loading" class="reader-loading">Ouverture du livre…</p>
@@ -548,6 +565,32 @@
       </div>
 
       <div class="reader-setting-row">
+        <label>Mode de lecture</label>
+        <div class="reader-chip-group" id="reader-mode-group">
+          <button type="button" data-mode="book">Livre</button>
+          <button type="button" data-mode="classic">Classique</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row rb-only">
+        <label>Mots par page</label>
+        <div class="reader-chip-group" id="reader-wpp-group">
+          <button type="button" data-wpp="200">200</button>
+          <button type="button" data-wpp="250">250</button>
+          <button type="button" data-wpp="300">300</button>
+          <button type="button" data-wpp="350">350</button>
+        </div>
+      </div>
+
+      <div class="reader-setting-row rb-only">
+        <label>Plein écran automatique</label>
+        <label class="reader-switch">
+          <input type="checkbox" id="reader-autofs-toggle" />
+          <span></span>
+        </label>
+      </div>
+
+      <div class="reader-setting-row rb-hide">
         <label>Taille du texte</label>
         <div class="reader-stepper">
           <button type="button" id="reader-font-minus">A−</button>
@@ -565,7 +608,7 @@
         </div>
       </div>
 
-      <div class="reader-setting-row">
+      <div class="reader-setting-row rb-hide">
         <label>Interligne</label>
         <div class="reader-chip-group" id="reader-line-height-group">
           <button type="button" data-lh="compact">Serré</button>
@@ -574,7 +617,7 @@
         </div>
       </div>
 
-      <div class="reader-setting-row">
+      <div class="reader-setting-row rb-hide">
         <label>Marges</label>
         <div class="reader-chip-group" id="reader-margin-group">
           <button type="button" data-margin="narrow">Étroites</button>
@@ -583,7 +626,7 @@
         </div>
       </div>
 
-      <div class="reader-setting-row">
+      <div class="reader-setting-row rb-hide">
         <label>Justifier le texte</label>
         <label class="reader-switch">
           <input type="checkbox" id="reader-justify-toggle" />
@@ -591,7 +634,7 @@
         </label>
       </div>
 
-      <div class="reader-setting-row">
+      <div class="reader-setting-row rb-hide">
         <label>Défilement</label>
         <div class="reader-chip-group" id="reader-scroll-group">
           <button type="button" data-scroll="paginated">Pages</button>
@@ -646,6 +689,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

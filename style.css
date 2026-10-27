@@ -1220,3 +1220,145 @@ html { scroll-behavior: smooth; }
   10%, 30%, 55%, 80% { opacity: .5; }
   20%, 40%, 65%, 90% { opacity: .15; }
 }
+
+/* ============================================================ */
+/* E-reader — "Mode livre" : plein écran, double page, papier,   */
+/* tranche, pli central et page qui se tourne.                   */
+/* Actif quand #reader-modal porte la classe .rb-mode.           */
+/* Hors de ce mode (Mode classique) rien de ce bloc ne s'affiche */
+/* ============================================================ */
+
+.reader-overlay {
+  --rb-paper: #f4ecd8; --rb-paper2: #ebe1c8; --rb-ink: #2a2014;
+  --rb-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .36  0 0 0 0 .28  0 0 0 0 .17  0 0 0 .10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* classic mode: the stage is a plain full-size box and the book decor is off */
+.rb-book { position: absolute; inset: 0; }
+.rb-book .reader-viewer { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rb-cover, .rb-edge, .rb-paper, .rb-shade, .rb-folio, .rb-cast, .rb-flap, .rb-touch, .rb-hint { display: none; }
+.reader-overlay:not(.rb-mode) .rb-only { display: none; }
+
+.reader-overlay.rb-mode { padding: 0; background: #0a0705; }
+.rb-mode .reader-frame {
+  max-width: none; border: none; border-radius: 0; clip-path: none; box-shadow: none;
+  background: transparent;
+}
+.rb-mode .reader-body {
+  background: radial-gradient(ellipse at 50% 38%, #33251a 0%, #1a120c 52%, #0a0705 100%);
+}
+.rb-mode .reader-nav-zone, .rb-mode .rb-hide { display: none; }
+
+/* toolbars float over the book and fade away when idle */
+.rb-mode .reader-topbar, .rb-mode .reader-bottombar {
+  position: absolute; left: 0; right: 0; z-index: 8; border: none;
+  transition: opacity .35s ease;
+}
+.rb-mode .reader-topbar { top: 0; background: linear-gradient(rgba(8,5,3,.92), rgba(8,5,3,0)); padding-bottom: 22px; }
+.rb-mode .reader-bottombar { bottom: 0; background: linear-gradient(rgba(8,5,3,0), rgba(8,5,3,.92)); padding-top: 22px; }
+.rb-mode .reader-frame.rb-idle .reader-topbar,
+.rb-mode .reader-frame.rb-idle .reader-bottombar { opacity: 0; pointer-events: none; }
+.rb-mode .reader-frame.rb-idle .rb-touch { cursor: none; }
+
+.rb-mode .rb-book {
+  inset: auto; left: var(--bx, 0px); top: var(--by, 0px);
+  width: var(--bw, 100%); height: var(--bh, 100%);
+  perspective: 4200px; perspective-origin: 50% 45%;
+}
+.rb-mode .rb-cover, .rb-mode .rb-edge, .rb-mode .rb-paper, .rb-mode .rb-touch { display: block; }
+.rb-mode .rb-shade, .rb-mode .rb-folio { display: block; }
+.rb-mode .rb-shade { display: flex; }
+.rb-mode .rb-cast { display: block; }
+.rb-mode .rb-hint { display: block; }
+.rb-mode .reader-panel { z-index: 10; }
+
+/* hard cover peeking out around the paper */
+.rb-cover {
+  position: absolute; inset: -7px -8px -9px; border-radius: 5px;
+  background: linear-gradient(135deg, #43301f 0%, #24170e 60%, #170e08 100%);
+  box-shadow: 0 38px 80px rgba(0,0,0,.72), 0 12px 26px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.06);
+}
+/* the two page stacks: thickness follows reading progress */
+.rb-edge {
+  position: absolute; top: 3px; bottom: 3px; width: 2px;
+  background: repeating-linear-gradient(90deg, #f3ecd8 0 1px, #cbbd9b 1px 2px);
+  transition: width .3s ease;
+}
+.rb-edge-l { right: calc(100% - 1px); border-radius: 3px 0 0 3px; box-shadow: inset 5px 0 7px rgba(0,0,0,.28); }
+.rb-edge-r { left: calc(100% - 1px); border-radius: 0 3px 3px 0; box-shadow: inset -5px 0 7px rgba(0,0,0,.28); }
+
+.rb-paper {
+  position: absolute; inset: 0; border-radius: 2px;
+  background: var(--rb-noise), linear-gradient(95deg, var(--rb-paper) 0%, var(--rb-paper2) 100%);
+}
+.rb-mode .reader-viewer {
+  position: absolute; left: 0; top: var(--iy, 0px); width: 100%; height: calc(100% - 2 * var(--iy, 0px)); z-index: 1;
+}
+.rb-mode .reader-viewer iframe { background: transparent; }
+
+/* curvature of the pages + the dark valley at the spine */
+.rb-shade { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.rb-shade-l, .rb-shade-r { flex: 1 1 50%; display: block; }
+.rb-shade-l {
+  background: linear-gradient(90deg, rgba(0,0,0,.13) 0, rgba(0,0,0,0) 5%, rgba(0,0,0,0) 78%,
+    rgba(0,0,0,.09) 93%, rgba(0,0,0,.30) 99%, rgba(0,0,0,.52) 100%);
+}
+.rb-shade-r {
+  background: linear-gradient(90deg, rgba(0,0,0,.52) 0, rgba(0,0,0,.30) 1%, rgba(0,0,0,.09) 7%,
+    rgba(0,0,0,0) 22%, rgba(0,0,0,0) 95%, rgba(0,0,0,.13) 100%);
+}
+.rb-single .rb-shade-l { display: none; }
+
+.rb-folio {
+  position: absolute; z-index: 3; bottom: calc(var(--iy, 20px) * .4); width: var(--pw, 50%);
+  text-align: center; font-family: 'EB Garamond', Georgia, serif; font-size: calc(var(--fs, 16px) * .82);
+  color: var(--rb-ink); opacity: .55; pointer-events: none; letter-spacing: .5px;
+}
+.rb-folio-l { left: 0; }
+.rb-folio-r { left: var(--pw, 50%); }
+.rb-single .rb-folio-r { display: none; }
+
+/* soft shadow thrown on the page underneath while a page is lifting */
+.rb-cast {
+  position: absolute; top: 0; z-index: 4; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,0) 70%);
+}
+
+/* the page being turned (3D) */
+.rb-flap { position: absolute; top: 0; z-index: 5; transform-style: preserve-3d; will-change: transform; pointer-events: none; }
+.rb-mode .rb-flap { display: none; }
+.rb-mode .rb-flap.on { display: block; }
+.rb-flap-face {
+  position: absolute; inset: 0; -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  background: var(--rb-noise), linear-gradient(95deg, var(--rb-paper) 0%, var(--rb-paper2) 100%);
+  box-shadow: 0 0 22px rgba(0,0,0,.35);
+}
+.rb-flap-back { transform: rotateY(180deg); }
+.rb-flap-face::before {
+  content: ""; position: absolute; left: 11%; right: 11%; top: var(--iy, 20px); bottom: var(--iy, 20px);
+  background: repeating-linear-gradient(to bottom, color-mix(in srgb, var(--rb-ink) 20%, transparent) 0 1px, transparent 1px calc(var(--fs, 16px) * 1.36));
+  opacity: .5;
+}
+.rb-flap-face::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(0,0,0,var(--lit, 0)) 0%, rgba(0,0,0,0) 65%);
+}
+
+.rb-touch { position: absolute; inset: -20px -30px; z-index: 6; cursor: pointer; touch-action: pan-y; }
+
+.rb-hint {
+  position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 9;
+  background: rgba(10,8,6,.88); color: #f2e8d0; padding: 8px 16px; border-radius: 20px;
+  font-family: var(--tron-font-body); font-size: 13px; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+}
+.rb-hint[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  .rb-mode .reader-topbar { padding: 8px 8px 20px; }
+  .rb-mode .reader-bottombar { padding: 18px 12px 8px; }
+  .rb-hint { white-space: normal; text-align: center; width: max-content; max-width: 86%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rb-edge { transition: none; }
+}

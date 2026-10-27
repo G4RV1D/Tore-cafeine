@@ -1351,6 +1351,9 @@
     theme: "light",
     warmth: 0,
     brightness: 100,
+    mode: "book",          // "book" = livre plein écran, "classic" = lecteur d'origine
+    wordsPerPage: 300,     // taille de page du mode livre
+    autoFullscreen: true,  // tente le plein écran à l'ouverture d'un livre
   };
 
   const THEME_COLORS = {
@@ -1404,6 +1407,8 @@
     rendition: null,
     bookId: null,
     bookState: null,
+    bookRecord: null,
+    locToken: 0,
     lastLocation: null, // set from the "relocated" event — avoids relying on
                          // rendition.currentLocation()'s return type, which
                          // differs between epub.js versions (sync vs promise)
@@ -1420,58 +1425,38 @@
     $("#reader-unsupported").hidden = true;
     $("#reader-viewer").innerHTML = "";
     closeAllPanels();
+    rs.bookRecord = bookRecord;
 
     const epubOk = isEpub(bookRecord);
     setChromeEnabled(epubOk);
+    modal.classList.toggle("rb-mode", epubOk && bookMode());
 
     if (!epubOk) {
       $("#reader-loading").hidden = true;
       $("#reader-unsupported").hidden = false;
       return;
     }
+    if (bookMode()) tryAutoFullscreen();
 
     try {
       const res = await fetch(window.ELVEN_API_BASE + bookRecord.download_url);
       if (!res.ok) throw new Error("Téléchargement impossible (erreur " + res.status + ")");
       const buf = await res.arrayBuffer();
 
-      if (rs.rendition) { try { rs.rendition.destroy(); } catch {} }
+      if (rs.rendition) { try { rs.rendition.destroy(); } catch {} rs.rendition = null; }
       if (rs.book) { try { rs.book.destroy(); } catch {} }
       rs.lastLocation = null;
 
       rs.bookId = bookRecord.id;
       rs.bookState = loadBookState(bookRecord.id);
       rs.book = ePub(buf);
-      rs.rendition = rs.book.renderTo("reader-viewer", {
-        width: "100%",
-        height: "100%",
-        flow: rs.settings.scrollMode === "scrolled" ? "scrolled-doc" : "paginated",
-        spread: "none",
-      });
 
-      rs.rendition.on("relocated", onRelocated);
-      rs.rendition.on("rendered", () => { $("#reader-loading").hidden = true; });
-
-      applyAllStyles();
-      await rs.rendition.display(rs.bookState.lastCfi || undefined);
+      await buildRendition(rs.bookState.lastCfi || undefined);
 
       rs.book.loaded.navigation.then((nav) => renderToc(nav.toc || [])).catch(() => {});
-
-      if (rs.bookState.locations) {
-        try {
-          rs.book.locations.load(rs.bookState.locations);
-          updateProgressFromLocation(rs.lastLocation);
-        } catch {}
-      } else {
-        rs.book.locations.generate(1000).then(() => {
-          rs.bookState.locations = rs.book.locations.save();
-          saveBookState(rs.bookId, rs.bookState);
-          updateProgressFromLocation(rs.lastLocation);
-        }).catch(() => {});
-      }
-
       renderBookmarks();
       updateBookmarkStar();
+      wakeBars();
     } catch (err) {
       $("#reader-loading").hidden = true;
       $("#reader-unsupported").hidden = false;
@@ -1479,6 +1464,80 @@
         "<p>Impossible d'ouvrir ce livre pour l'instant.</p><p>" + escapeHtmlLocal((err && err.message) || "") + "</p>";
     }
   };
+
+  // (re)creates the epub.js rendition for the current book in the current
+  // mode — used on open, on a mode switch, and when the window is resized
+  // (the page box is fixed in pixels, so a new size needs a new rendition)
+  async function buildRendition(startCfi) {
+    if (!rs.book) return;
+    if (rs.rendition) { try { rs.rendition.destroy(); } catch {} rs.rendition = null; }
+    $("#reader-viewer").innerHTML = "";
+    const modal = $("#reader-modal");
+    const book = bookMode();
+    modal.classList.toggle("rb-mode", book);
+
+    let opts;
+    if (book) {
+      try {
+        await Promise.race([
+          document.fonts.load("100px 'EB Garamond'"),
+          new Promise((r) => setTimeout(r, 1200)),
+        ]);
+      } catch {}
+      const g = computeGeom();
+      bk.geom = g;
+      bk.fs = computeFontSize(g);
+      applyBookGeometry(g);
+      opts = {
+        width: g.viewW, height: g.viewH, flow: "paginated",
+        spread: g.pages === 2 ? "always" : "none", minSpreadWidth: 1, gap: g.gap,
+      };
+    } else {
+      bk.geom = null;
+      opts = {
+        width: "100%", height: "100%",
+        flow: rs.settings.scrollMode === "scrolled" ? "scrolled-doc" : "paginated",
+        spread: "none",
+      };
+    }
+
+    $("#reader-loading").hidden = false;
+    rs.rendition = rs.book.renderTo("reader-viewer", opts);
+    rs.rendition.hooks.content.register((contents) => {
+      try {
+        const root = contents.document.documentElement;
+        if (!root.getAttribute("lang") && !root.getAttribute("xml:lang")) root.setAttribute("lang", "fr");
+      } catch {}
+    });
+    rs.rendition.on("relocated", onRelocated);
+    rs.rendition.on("rendered", () => { $("#reader-loading").hidden = true; });
+
+    applyAllStyles();
+    await rs.rendition.display(startCfi || undefined);
+    $("#reader-loading").hidden = true;
+    ensureLocations();
+    updateBookUI(rs.lastLocation);
+  }
+
+  // page numbers / progress: one "location" per page-worth of text in book
+  // mode, 1000 characters in classic mode — stored separately per setting
+  function ensureLocations() {
+    if (!rs.book || !rs.bookState) return;
+    const book = bookMode();
+    const key = book ? "locBook_" + (Number(rs.settings.wordsPerPage) || 300) : "locations";
+    const chars = book ? bk.pageChars : 1000;
+    const token = ++rs.locToken;
+    const done = () => { if (token === rs.locToken) { updateProgressFromLocation(rs.lastLocation); updateBookUI(rs.lastLocation); } };
+    if (rs.bookState[key]) {
+      try { rs.book.locations.load(rs.bookState[key]); done(); return; } catch {}
+    }
+    rs.book.locations.generate(chars).then(() => {
+      if (token !== rs.locToken) return;
+      rs.bookState[key] = rs.book.locations.save();
+      saveBookState(rs.bookId, rs.bookState);
+      done();
+    }).catch(() => {});
+  }
 
   function setChromeEnabled(enabled) {
     ["#reader-toc-btn", "#reader-bookmark-btn", "#reader-bookmarks-list-btn", "#reader-settings-btn", "#reader-prev", "#reader-next"].forEach((sel) => {
@@ -1489,11 +1548,16 @@
 
   function closeReader() {
     persistCurrentLocation();
+    if (document.fullscreenElement && document.exitFullscreen) { try { document.exitFullscreen().catch(() => {}); } catch {} }
+    cancelTurn();
+    clearTimeout(bk.idleTimer);
     $("#reader-modal").hidden = true;
+    $("#reader-modal").classList.remove("rb-mode");
     closeAllPanels();
     if (rs.rendition) { try { rs.rendition.destroy(); } catch {} rs.rendition = null; }
     if (rs.book) { try { rs.book.destroy(); } catch {} rs.book = null; }
     rs.lastLocation = null;
+    rs.bookRecord = null;
     // refresh the library's "reprendre où je me suis arrêté" rail — this
     // book may have just been started, or its progress just changed
     if (typeof window.__cdiRefreshResume === "function") window.__cdiRefreshResume();
@@ -1508,18 +1572,28 @@
   });
 
   // ---------- navigation ----------
-  $("#reader-prev").addEventListener("click", () => rs.rendition && rs.rendition.prev());
-  $("#reader-next").addEventListener("click", () => rs.rendition && rs.rendition.next());
+  // one entry point for every way of changing page (buttons, keys, taps,
+  // swipes, wheel): the animated page turn in book mode, plain epub.js
+  // paging in classic mode
+  function go(dir) {
+    if (!rs.rendition) return;
+    if (bookMode() && bk.geom && $("#reader-modal").classList.contains("rb-mode")) { turnPage(dir); return; }
+    if (dir > 0) rs.rendition.next(); else rs.rendition.prev();
+  }
+  $("#reader-prev").addEventListener("click", () => go(-1));
+  $("#reader-next").addEventListener("click", () => go(1));
   document.addEventListener("keydown", (e) => {
     if ($("#reader-modal").hidden) return;
-    if (e.key === "ArrowLeft") rs.rendition && rs.rendition.prev();
-    if (e.key === "ArrowRight") rs.rendition && rs.rendition.next();
-    if (e.key === "Escape") closeReader();
+    if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(-1); }
+    else if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); go(1); }
+    else if ((e.key === "f" || e.key === "F") && !/input|textarea/i.test((e.target && e.target.tagName) || "")) toggleFullscreen();
+    else if (e.key === "Escape") closeReader();
   });
 
   function onRelocated(location) {
     rs.lastLocation = location;
     updateProgressFromLocation(location);
+    updateBookUI(location);
     persistCurrentLocation(location);
     updateBookmarkStar();
   }
@@ -1668,6 +1742,9 @@
     document.querySelectorAll("#reader-margin-group button").forEach((b) => b.classList.toggle("active", b.dataset.margin === rs.settings.margin));
     document.querySelectorAll("#reader-scroll-group button").forEach((b) => b.classList.toggle("active", b.dataset.scroll === rs.settings.scrollMode));
     document.querySelectorAll("#reader-theme-group button").forEach((b) => b.classList.toggle("active", b.dataset.theme === rs.settings.theme));
+    document.querySelectorAll("#reader-mode-group button").forEach((b) => b.classList.toggle("active", b.dataset.mode === (rs.settings.mode === "classic" ? "classic" : "book")));
+    document.querySelectorAll("#reader-wpp-group button").forEach((b) => b.classList.toggle("active", Number(b.dataset.wpp) === Number(rs.settings.wordsPerPage)));
+    $("#reader-autofs-toggle").checked = !!rs.settings.autoFullscreen;
     $("#reader-justify-toggle").checked = !!rs.settings.justify;
     $("#reader-warmth-range").value = rs.settings.warmth;
     $("#reader-brightness-range").value = rs.settings.brightness;
@@ -1675,6 +1752,7 @@
 
   function applyAllStyles() {
     if (!rs.rendition) return;
+    if (bookMode() && bk.geom) { applyBookStyles(); return; }
     const colors = THEME_COLORS[rs.settings.theme] || THEME_COLORS.light;
     const css = {
       body: {
@@ -1698,7 +1776,7 @@
     rs.rendition.themes.fontSize(rs.settings.fontScale + "%");
 
     $("#reader-warmth-overlay").style.opacity = String((rs.settings.warmth / 100) * 0.55);
-    $("#reader-viewer").style.filter = "brightness(" + rs.settings.brightness + "%)";
+    $("#reader-viewer-wrap").style.filter = "brightness(" + rs.settings.brightness + "%)";
 
     refreshSettingsUI();
   }
@@ -1712,7 +1790,10 @@
   $("#reader-font-minus").addEventListener("click", () => updateSetting({ fontScale: Math.max(70, rs.settings.fontScale - 10) }));
   $("#reader-font-plus").addEventListener("click", () => updateSetting({ fontScale: Math.min(240, rs.settings.fontScale + 10) }));
 
-  document.querySelectorAll("#reader-font-family-group button").forEach((b) => b.addEventListener("click", () => updateSetting({ fontFamily: b.dataset.font })));
+  document.querySelectorAll("#reader-font-family-group button").forEach((b) => b.addEventListener("click", () => {
+    updateSetting({ fontFamily: b.dataset.font });
+    if (bookMode() && rs.book) rebuild(); // another typeface = another text width: recompute the page
+  }));
   document.querySelectorAll("#reader-line-height-group button").forEach((b) => b.addEventListener("click", () => updateSetting({ lineHeight: b.dataset.lh })));
   document.querySelectorAll("#reader-margin-group button").forEach((b) => b.addEventListener("click", () => updateSetting({ margin: b.dataset.margin })));
   document.querySelectorAll("#reader-theme-group button").forEach((b) => b.addEventListener("click", () => updateSetting({ theme: b.dataset.theme })));
@@ -1730,6 +1811,397 @@
     }
     refreshSettingsUI();
   }));
+
+  // ================================================================
+  // MODE LIVRE — plein écran, pages de format poche à contenu constant,
+  // double page sur grand écran, papier / tranche / pli, page qui se tourne
+  // ================================================================
+  const BK = {
+    RATIO: 0.611,       // page de poche : 11 x 18 cm
+    LINE: 1.36,         // interligne d'un roman imprimé
+    EFFICIENCY: 0.84,   // part de la capacité théorique réellement remplie par du texte
+    INSET_Y: 0.065,     // marge haut et bas, en fraction de la hauteur de page
+    GAP_RATIO: 0.2,     // marges gauche + droite d'une page, en fraction de sa largeur
+    TURN_MS: 680,
+    SAMPLE: "Le soleil se couchait lentement derrière les collines, et la brume du soir montait des vallées vers le village endormi. Personne ne savait encore ce que la nuit allait apporter.",
+    FONT_BOOK: "'EB Garamond', Georgia, 'Times New Roman', serif",
+  };
+  const BK_PAPER = {
+    light: { p: "#f4ecd8", p2: "#ebe1c8", ink: "#2a2014" },
+    sepia: { p: "#ead9b6", p2: "#dcc79b", ink: "#3a2c17" },
+    dark:  { p: "#38332a", p2: "#2d2922", ink: "#e4dcc8" },
+    black: { p: "#141414", p2: "#0b0b0b", ink: "#c9c2b0" },
+  };
+  const bk = { geom: null, fs: 16, pageChars: 1800, edgeMax: 15, idleTimer: 0, resizeTimer: 0, hintTimer: 0 };
+  const FLAP = { raf: 0, busy: false, swapped: false, swapPromise: null, dir: 1, angle: 0 };
+
+  function bookMode() { return rs.settings.mode !== "classic"; }
+  function bookFontStack() { return rs.settings.fontFamily === "sans" ? FONT_STACKS.sans : BK.FONT_BOOK; }
+
+  // size of the page box: pocket proportions, as large as the screen allows;
+  // two pages side by side on a wide landscape screen, one page otherwise
+  function computeGeom() {
+    const wrap = $("#reader-viewer-wrap");
+    const W = Math.max(280, wrap.clientWidth), H = Math.max(360, wrap.clientHeight);
+    const pages = (W >= 820 && W / H >= 1.12) ? 2 : 1;
+    const edge = Math.max(6, Math.min(15, Math.round(W * 0.02)));
+    const sidePad = edge + 5 + (W < 640 ? W * 0.015 : Math.min(34, W * 0.03));
+    const padY = Math.min(58, H * 0.075) + 8;
+    let pageH = H - 2 * padY;
+    let pageW = pageH * BK.RATIO;
+    const maxW = (W - 2 * sidePad) / pages;
+    if (pageW > maxW) { pageW = maxW; pageH = pageW / BK.RATIO; }
+    pageW = Math.floor(pageW / 2) * 2;
+    pageH = Math.floor(pageH);
+    const iy = Math.round(pageH * BK.INSET_Y);
+    const gap = Math.round((pageW * BK.GAP_RATIO) / 2) * 2;
+    bk.edgeMax = edge;
+    return {
+      W, H, pages, pageW, pageH, iy, gap,
+      viewW: pageW * pages, viewH: pageH - 2 * iy,
+      bx: Math.round((W - pageW * pages) / 2), by: Math.round((H - pageH) / 2),
+    };
+  }
+
+  // The font size is derived from the page box and the REAL width of the
+  // typeface (measured on a French sample), so that a page holds the same
+  // number of words on every screen: words/page =
+  //   (text width / (fs x char width)) x (text height / (fs x line height)) x words per char
+  function computeFontSize(g) {
+    const wpp = Number(rs.settings.wordsPerPage) || 300;
+    const words = BK.SAMPLE.trim().split(/\s+/).length;
+    const wordsPerChar = words / BK.SAMPLE.length;
+    let cw = 0.42; // em per character — fallback if canvas measuring is unavailable
+    try {
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.font = "100px " + bookFontStack();
+      cw = ctx.measureText(BK.SAMPLE).width / BK.SAMPLE.length / 100 || cw;
+    } catch {}
+    const textW = g.pageW - g.gap, textH = g.viewH;
+    // BK.EFFICIENCY: a real page never fills every line (short last lines of
+    // paragraphs, dialogue, chapter headings), so the nominal capacity has to
+    // be a bit higher than the words we want to actually see on the page
+    let fs = Math.sqrt((textW * textH * wordsPerChar * BK.EFFICIENCY) / (cw * BK.LINE * wpp));
+    fs = Math.max(8, Math.min(30, Math.round(fs * 10) / 10));
+    bk.pageChars = Math.round(wpp / wordsPerChar);
+    return fs;
+  }
+
+  function applyBookGeometry(g) {
+    const b = $("#rb-book");
+    b.style.setProperty("--bx", g.bx + "px");
+    b.style.setProperty("--by", g.by + "px");
+    b.style.setProperty("--bw", g.viewW + "px");
+    b.style.setProperty("--bh", g.pageH + "px");
+    b.style.setProperty("--pw", g.pageW + "px");
+    b.style.setProperty("--iy", g.iy + "px");
+    b.style.setProperty("--fs", bk.fs + "px");
+    $("#reader-modal").classList.toggle("rb-single", g.pages === 1);
+    applyPaperTheme();
+  }
+
+  function applyPaperTheme() {
+    const t = BK_PAPER[rs.settings.theme] || BK_PAPER.light;
+    const m = $("#reader-modal");
+    m.style.setProperty("--rb-paper", t.p);
+    m.style.setProperty("--rb-paper2", t.p2);
+    m.style.setProperty("--rb-ink", t.ink);
+  }
+
+  // text styling inside the page: a printed novel (justified, hyphenated,
+  // indented paragraphs without spacing) on a transparent background so the
+  // paper texture shows through
+  function applyBookStyles() {
+    const t = BK_PAPER[rs.settings.theme] || BK_PAPER.light;
+    const stack = bookFontStack();
+    const ink = t.ink + " !important";
+    const css = {
+      body: {
+        background: "transparent !important", color: ink,
+        "font-family": stack + " !important", "font-size": bk.fs + "px !important",
+        "line-height": BK.LINE + " !important", "text-align": "justify !important",
+        hyphens: "auto !important", "-webkit-hyphens": "auto !important",
+        "overflow-wrap": "break-word", "font-kerning": "normal", "text-rendering": "optimizeLegibility",
+      },
+      "p, li, blockquote, dd": {
+        color: ink, "font-family": stack + " !important", "font-size": "1em !important",
+        "line-height": "inherit !important", margin: "0 !important", "text-indent": "1.3em !important",
+        "text-align": "justify !important", hyphens: "auto !important", "-webkit-hyphens": "auto !important",
+        orphans: "2", widows: "2",
+      },
+      "div, span, a, em, i, b, strong": { color: ink, "font-family": stack + " !important" },
+      "h1, h2, h3, h4, h5, h6": {
+        color: ink, "font-family": stack + " !important", "text-align": "center !important",
+        "text-indent": "0 !important", "line-height": "1.2 !important", margin: "1.1em 0 .8em !important",
+        "break-after": "avoid",
+      },
+      "h1 + p, h2 + p, h3 + p, hr + p, p:first-child": { "text-indent": "0 !important" },
+      "img, svg, image": { "max-width": "100% !important", "max-height": "100% !important", "object-fit": "contain !important" },
+    };
+    rs.rendition.themes.register("cdi-book", css);
+    rs.rendition.themes.select("cdi-book");
+    applyPaperTheme();
+    $("#reader-warmth-overlay").style.opacity = String((rs.settings.warmth / 100) * 0.55);
+    $("#reader-viewer-wrap").style.filter = "brightness(" + rs.settings.brightness + "%)";
+    refreshSettingsUI();
+  }
+
+  // page numbers under each page, thickness of the two page stacks, and the
+  // "n / total" label. Uses the paper page numbers when the EPUB carries a
+  // page-list (the printed edition's pagination), page-worths of text otherwise.
+  function updateBookUI(loc) {
+    if (!bookMode() || !bk.geom || !loc || !loc.start || !rs.book) return;
+    const g = bk.geom;
+    let n = null, total = null, pct = 0;
+    try {
+      const L = rs.book.locations;
+      if (L && L.length()) {
+        n = L.locationFromCfi(loc.start.cfi) + 1;
+        total = L.length();
+        pct = L.percentageFromCfi(loc.start.cfi) || 0;
+      }
+    } catch {}
+    let paperL = null, paperR = null;
+    try {
+      const pl = rs.book.pageList;
+      if (pl && pl.pages && pl.pages.length) {
+        const a = pl.pageFromCfi(loc.start.cfi);
+        const b = loc.end ? pl.pageFromCfi(loc.end.cfi) : a;
+        if (a !== -1 && a != null) paperL = a;
+        if (b !== -1 && b != null) paperR = b;
+      }
+    } catch {}
+    const left = paperL != null ? String(paperL) : (n != null ? String(n) : "");
+    let right = "";
+    if (g.pages === 2) {
+      if (paperR != null && String(paperR) !== left) right = String(paperR);
+      else if (paperL != null && !isNaN(Number(paperL))) right = String(Number(paperL) + 1);
+      else if (n != null && n + 1 <= total) right = String(n + 1);
+    }
+    $("#rb-folio-l").textContent = left;
+    $("#rb-folio-r").textContent = right;
+    $("#rb-edge-l").style.width = (2 + pct * bk.edgeMax).toFixed(1) + "px";
+    $("#rb-edge-r").style.width = (2 + (1 - pct) * bk.edgeMax).toFixed(1) + "px";
+    if (n != null) {
+      $("#reader-progress-label").textContent = (paperL != null ? "p. " + paperL : n + " / " + total);
+    }
+  }
+
+  // ---------- the page turn ----------
+  function flapSetup(dir) {
+    const g = bk.geom, flap = $("#rb-flap"), cast = $("#rb-cast");
+    const double = g.pages === 2;
+    FLAP.dir = dir;
+    const left = (dir > 0 && double) ? g.pageW : 0;
+    const fromLeft = dir > 0 || !double;
+    flap.style.width = cast.style.width = g.pageW + "px";
+    flap.style.height = cast.style.height = g.pageH + "px";
+    flap.style.left = cast.style.left = left + "px";
+    flap.style.transformOrigin = fromLeft ? "left center" : "right center";
+    cast.style.background = "linear-gradient(" + (fromLeft ? "90deg" : "270deg") + ", rgba(0,0,0,.55), rgba(0,0,0,0) 70%)";
+    flap.classList.add("on");
+  }
+  // a = progress of the turn, 0 (flat) to 180 (fully turned)
+  function setAngle(a) {
+    const g = bk.geom, flap = $("#rb-flap");
+    FLAP.angle = a;
+    let rot;
+    if (FLAP.dir > 0) rot = -a;                    // next: lifts on the right, flips to the left
+    else if (g.pages === 2) rot = a;               // previous (2 pages): lifts on the left, flips to the right
+    else rot = -(180 - a);                         // previous (1 page): comes back from the left onto the page
+    flap.style.transform = "rotateY(" + rot.toFixed(2) + "deg)";
+    const s = Math.sin((a * Math.PI) / 180);
+    flap.style.setProperty("--lit", (0.3 * s).toFixed(3));
+    flap.style.opacity = a > 168 ? String(Math.max(0, (180 - a) / 12)) : "1";
+    $("#rb-cast").style.opacity = (0.9 * s).toFixed(3);
+  }
+  function finishFlap() {
+    const flap = $("#rb-flap");
+    flap.classList.remove("on");
+    flap.style.transform = "";
+    flap.style.opacity = "1";
+    $("#rb-cast").style.opacity = "0";
+    FLAP.angle = 0;
+  }
+  function cancelTurn() {
+    cancelAnimationFrame(FLAP.raf);
+    FLAP.busy = false;
+    FLAP.swapped = false;
+    if (bk.geom) finishFlap();
+  }
+  function doSwap() {
+    FLAP.swapped = true;
+    try {
+      const r = FLAP.dir > 0 ? rs.rendition.next() : rs.rendition.prev();
+      FLAP.swapPromise = Promise.resolve(r).catch(() => {});
+    } catch { FLAP.swapPromise = Promise.resolve(); }
+  }
+  function runTurn(from, to, commit) {
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const dur = Math.max(240, BK.TURN_MS * Math.abs(to - from) / 180);
+      const step = (now) => {
+        const p = Math.min(1, (now - start) / dur);
+        const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; // easeInOutCubic
+        const a = from + (to - from) * e;
+        setAngle(a);
+        if (commit && !FLAP.swapped && a >= 90) doSwap();
+        if (p < 1) FLAP.raf = requestAnimationFrame(step); else resolve();
+      };
+      FLAP.raf = requestAnimationFrame(step);
+    });
+  }
+  async function endTurn() {
+    if (FLAP.swapPromise) { try { await FLAP.swapPromise; } catch {} }
+    FLAP.swapPromise = null;
+    finishFlap();
+    FLAP.busy = false;
+  }
+  async function turnPage(dir) {
+    if (!rs.rendition || FLAP.busy) return;
+    const loc = rs.lastLocation;
+    const blocked = !!(loc && (dir > 0 ? loc.atEnd : loc.atStart));
+    FLAP.busy = true; FLAP.swapped = false; FLAP.swapPromise = null;
+    flapSetup(dir); setAngle(0);
+    if (blocked) { await runTurn(0, 14, false); await runTurn(14, 0, false); }
+    else await runTurn(0, 180, true);
+    await endTurn();
+  }
+
+  // ---------- touch / mouse on the book: tap = turn, drag = follow the page ----------
+  (function initTouch() {
+    const touch = $("#rb-touch");
+    let st = null;
+    touch.addEventListener("pointerdown", (e) => {
+      if (FLAP.busy || (e.pointerType === "mouse" && e.button !== 0)) return;
+      st = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, drag: false, dir: 0 };
+      try { touch.setPointerCapture(e.pointerId); } catch {}
+    });
+    touch.addEventListener("pointermove", (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x, dy = e.clientY - st.y;
+      if (!st.drag) {
+        if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+        st.drag = true; st.dir = dx < 0 ? 1 : -1;
+        const loc = rs.lastLocation;
+        st.blocked = !!(loc && (st.dir > 0 ? loc.atEnd : loc.atStart));
+        FLAP.busy = true; FLAP.swapped = false; FLAP.swapPromise = null;
+        flapSetup(st.dir); setAngle(0);
+      }
+      const reach = bk.geom.pageW * 0.85;
+      const max = st.blocked ? 14 : 88;
+      setAngle(Math.min(max, (Math.abs(dx) / reach) * 88));
+    });
+    const release = async (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      const s = st; st = null;
+      try { touch.releasePointerCapture(e.pointerId); } catch {}
+      if (s.drag) {
+        const a = FLAP.angle;
+        if (!s.blocked && a > 28) await runTurn(a, 180, true); else await runTurn(a, 0, false);
+        await endTurn();
+        return;
+      }
+      if (e.type === "pointercancel") return;
+      // a tap: left side = previous page, right side = next page
+      const r = $("#rb-book").getBoundingClientRect();
+      const frac = (e.clientX - r.left) / Math.max(1, r.width);
+      const split = bk.geom.pages === 2 ? 0.5 : 0.33;
+      go(frac < split ? -1 : 1);
+    };
+    touch.addEventListener("pointerup", release);
+    touch.addEventListener("pointercancel", release);
+    touch.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      if (Math.abs(e.deltaY) + Math.abs(e.deltaX) < 20) return;
+      go(e.deltaY + e.deltaX > 0 ? 1 : -1);
+    }, { passive: false });
+  })();
+
+  // ---------- full screen + auto-hiding toolbars ----------
+  function showHint(msg) {
+    const h = $("#rb-hint");
+    h.textContent = msg; h.hidden = false;
+    clearTimeout(bk.hintTimer);
+    bk.hintTimer = setTimeout(() => { h.hidden = true; }, 5200);
+  }
+  function fullscreenSupported() {
+    const el = $("#reader-modal");
+    return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+  }
+  function toggleFullscreen() {
+    const el = $("#reader-modal");
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {}
+      return;
+    }
+    if (!fullscreenSupported()) { showHint("Plein écran non disponible ici : la lecture occupe déjà tout l'écran."); return; }
+    try {
+      const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      if (r && r.catch) r.catch(() => showHint("Le navigateur a refusé le plein écran."));
+    } catch { showHint("Le navigateur a refusé le plein écran."); }
+  }
+  function tryAutoFullscreen() {
+    if (!rs.settings.autoFullscreen || document.fullscreenElement) return;
+    if (!fullscreenSupported()) return;
+    const el = $("#reader-modal");
+    const hint = () => showHint("Appuie sur ⛶ (ou sur la touche F) pour lire en plein écran");
+    try {
+      const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      if (r && r.catch) r.catch(hint);
+    } catch { hint(); }
+  }
+  $("#reader-fullscreen-btn").addEventListener("click", toggleFullscreen);
+  document.addEventListener("fullscreenchange", () => {
+    $("#reader-modal").classList.toggle("rb-fullscreen", !!document.fullscreenElement);
+  });
+
+  function panelOpen() {
+    return ["#reader-settings-panel", "#reader-toc-panel", "#reader-bookmarks-panel"].some((sel) => !$(sel).hidden);
+  }
+  function wakeBars() {
+    const frame = $(".reader-frame");
+    frame.classList.remove("rb-idle");
+    clearTimeout(bk.idleTimer);
+    if (!bookMode() || $("#reader-modal").hidden) return;
+    bk.idleTimer = setTimeout(() => { if (!panelOpen()) frame.classList.add("rb-idle"); }, 2800);
+  }
+  $(".reader-frame").addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") wakeBars(); });
+  $(".reader-frame").addEventListener("pointerdown", () => wakeBars());
+
+  // ---------- rebuild on resize / mode change ----------
+  async function rebuild() {
+    if (!rs.book) return;
+    const cfi = (rs.lastLocation && rs.lastLocation.start && rs.lastLocation.start.cfi) || rs.bookState.lastCfi || undefined;
+    cancelTurn();
+    try { await buildRendition(cfi); } catch {}
+    renderBookmarks(); updateBookmarkStar(); wakeBars();
+  }
+  window.addEventListener("resize", () => {
+    clearTimeout(bk.resizeTimer);
+    bk.resizeTimer = setTimeout(() => {
+      if ($("#reader-modal").hidden || !rs.book || !bookMode() || !bk.geom) return;
+      const g = computeGeom(), o = bk.geom;
+      if (g.pages !== o.pages || Math.abs(g.pageW - o.pageW) > 2 || Math.abs(g.pageH - o.pageH) > 2) rebuild();
+    }, 280);
+  });
+
+  // ---------- settings: mode, words per page, auto full screen ----------
+  document.querySelectorAll("#reader-mode-group button").forEach((b) => b.addEventListener("click", () => {
+    if ((rs.settings.mode === "classic" ? "classic" : "book") === b.dataset.mode) return;
+    updateSetting({ mode: b.dataset.mode });
+    if (rs.book) rebuild();
+  }));
+  document.querySelectorAll("#reader-wpp-group button").forEach((b) => b.addEventListener("click", () => {
+    if (Number(rs.settings.wordsPerPage) === Number(b.dataset.wpp)) return;
+    rs.settings = Object.assign({}, rs.settings, { wordsPerPage: Number(b.dataset.wpp) });
+    saveSettings(rs.settings); refreshSettingsUI();
+    if (rs.book && bookMode()) rebuild();
+  }));
+  $("#reader-autofs-toggle").addEventListener("change", (e) => {
+    rs.settings = Object.assign({}, rs.settings, { autoFullscreen: e.target.checked });
+    saveSettings(rs.settings);
+  });
 
   refreshSettingsUI();
 })();
