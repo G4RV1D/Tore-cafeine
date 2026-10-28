@@ -1527,7 +1527,7 @@
     const key = book ? "locBook_" + (Number(rs.settings.wordsPerPage) || 300) : "locations";
     const chars = book ? bk.pageChars : 1000;
     const token = ++rs.locToken;
-    const done = () => { if (token === rs.locToken) { updateProgressFromLocation(rs.lastLocation); updateBookUI(rs.lastLocation); } };
+    const done = () => { if (token === rs.locToken) { updateProgressFromLocation(rs.lastLocation); updateBookUI(rs.lastLocation); rtOnProgress(rs.lastLocation); } };
     if (rs.bookState[key]) {
       try { rs.book.locations.load(rs.bookState[key]); done(); return; } catch {}
     }
@@ -1540,7 +1540,7 @@
   }
 
   function setChromeEnabled(enabled) {
-    ["#reader-toc-btn", "#reader-bookmark-btn", "#reader-bookmarks-list-btn", "#reader-settings-btn", "#reader-prev", "#reader-next"].forEach((sel) => {
+    ["#reader-toc-btn", "#reader-bookmark-btn", "#reader-bookmarks-list-btn", "#reader-settings-btn", "#reader-timer-btn", "#reader-prev", "#reader-next"].forEach((sel) => {
       $(sel).style.visibility = enabled ? "" : "hidden";
     });
     $(".reader-bottombar").style.visibility = enabled ? "" : "hidden";
@@ -1548,6 +1548,7 @@
 
   function closeReader() {
     persistCurrentLocation();
+    rtStop();
     if (document.fullscreenElement && document.exitFullscreen) { try { document.exitFullscreen().catch(() => {}); } catch {} }
     cancelTurn();
     clearTimeout(bk.idleTimer);
@@ -1587,6 +1588,7 @@
     if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); go(-1); }
     else if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); go(1); }
     else if ((e.key === "f" || e.key === "F") && !/input|textarea/i.test((e.target && e.target.tagName) || "")) toggleFullscreen();
+    else if ((e.key === "t" || e.key === "T") && !/input|textarea/i.test((e.target && e.target.tagName) || "")) rtTogglePanel();
     else if (e.key === "Escape") closeReader();
   });
 
@@ -1596,6 +1598,7 @@
     updateBookUI(location);
     persistCurrentLocation(location);
     updateBookmarkStar();
+    rtOnProgress(location);
   }
 
   function persistCurrentLocation(location) {
@@ -1721,8 +1724,8 @@
 
   // ---------- side panels ----------
   function closeAllPanels() {
-    ["#reader-settings-panel", "#reader-toc-panel", "#reader-bookmarks-panel"].forEach((sel) => { $(sel).hidden = true; });
-    ["#reader-settings-btn", "#reader-toc-btn", "#reader-bookmarks-list-btn"].forEach((sel) => $(sel).classList.remove("active"));
+    ["#reader-settings-panel", "#reader-toc-panel", "#reader-bookmarks-panel", "#reader-timer-panel"].forEach((sel) => { $(sel).hidden = true; });
+    ["#reader-settings-btn", "#reader-toc-btn", "#reader-bookmarks-list-btn", "#reader-timer-btn"].forEach((sel) => $(sel).classList.remove("active"));
   }
   function togglePanel(panelSel, btnSel) {
     const isOpen = !$(panelSel).hidden;
@@ -2157,7 +2160,7 @@
   });
 
   function panelOpen() {
-    return ["#reader-settings-panel", "#reader-toc-panel", "#reader-bookmarks-panel"].some((sel) => !$(sel).hidden);
+    return ["#reader-settings-panel", "#reader-toc-panel", "#reader-bookmarks-panel", "#reader-timer-panel"].some((sel) => !$(sel).hidden);
   }
   function wakeBars() {
     const frame = $(".reader-frame");
@@ -2201,6 +2204,349 @@
   $("#reader-autofs-toggle").addEventListener("change", (e) => {
     rs.settings = Object.assign({}, rs.settings, { autoFullscreen: e.target.checked });
     saveSettings(rs.settings);
+  });
+
+
+  // ================================================================
+  // SÉANCE DE LECTURE — minuteur sans montre : durée, nombre de pages,
+  // pourcentage du livre ou nombre de chapitres. Rien ne s'affiche
+  // pendant la lecture (sauf la barre discrète si elle est activée) ;
+  // une carte douce apparaît quand l'objectif est atteint.
+  // ================================================================
+  const RT_DEFAULTS = {
+    mode: "time",                                       // time | pages | percent | chapters
+    amounts: { time: 20, pages: 20, percent: 10, chapters: 1 },
+    pctKind: "gain",                                    // gain = avancer de X % ; reach = aller jusqu'à X %
+    bar: false, sound: true, autoPause: true,
+  };
+  const RT_MODES = {
+    time:     { label: "Durée",       unit: "min",      presets: [10, 20, 30, 45, 60], step: 5, extra: 5, max: 600 },
+    pages:    { label: "Pages",       unit: "pages",    presets: [10, 20, 30, 50, 100], step: 5, extra: 5, max: 2000 },
+    percent:  { label: "Pourcentage", unit: "%",        presets: [5, 10, 25, 50],       step: 1, extra: 5, max: 100 },
+    chapters: { label: "Chapitres",   unit: "chapitre(s)", presets: [1, 2, 3, 5],       step: 1, extra: 1, max: 200 },
+  };
+  const RT = {
+    cfg: null, running: false, paused: false, autoPaused: false, ended: false,
+    mode: "time", target: 0, pctKind: "gain", targetPct: 0,
+    startedAt: 0, elapsed: 0, resumeAt: 0, tick: 0,
+    startCfi: null, startPct: null, maxPct: null, startSpine: null, maxSpine: null,
+  };
+
+  function rtCfg() {
+    const c = rs.settings.timer || {};
+    return Object.assign({}, RT_DEFAULTS, c, { amounts: Object.assign({}, RT_DEFAULTS.amounts, c.amounts || {}) });
+  }
+  function rtSaveCfg(patch) {
+    const c = Object.assign(rtCfg(), patch);
+    rs.settings = Object.assign({}, rs.settings, { timer: c });
+    saveSettings(rs.settings);
+    return c;
+  }
+
+  // ---------- progress measures (independent of font size / words per page) ----------
+  function rtLocs() {
+    try { const L = rs.book && rs.book.locations; return L && L.length() ? L : null; } catch { return null; }
+  }
+  function rtPctOf(cfi) {
+    const L = rtLocs();
+    if (!L || !cfi) return null;
+    try { const p = L.percentageFromCfi(cfi); return typeof p === "number" && !isNaN(p) ? p : null; } catch { return null; }
+  }
+  function rtCurrentPct() {
+    const loc = rs.lastLocation;
+    return loc && loc.start ? rtPctOf(loc.start.cfi) : null;
+  }
+  // pages read = furthest point reached minus the starting point, in pages of
+  // the current layout (going back and forth never counts twice)
+  function rtPagesRead() {
+    const L = rtLocs();
+    if (!L || RT.startPct == null || RT.maxPct == null) return null;
+    return Math.max(0, Math.round((RT.maxPct - RT.startPct) * L.length()));
+  }
+  function rtElapsedMs() {
+    return RT.elapsed + (RT.running && !RT.paused ? Date.now() - RT.resumeAt : 0);
+  }
+  function rtFmtDur(ms) {
+    const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+    if (m >= 60) return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0");
+    return m + " min " + String(s).padStart(2, "0") + " s";
+  }
+
+  // fraction of the goal done, 0..1 (null = not measurable yet)
+  function rtFraction() {
+    if (RT.mode === "time") return Math.min(1, rtElapsedMs() / (RT.target * 60000));
+    if (RT.mode === "pages") { const p = rtPagesRead(); return p == null ? null : Math.min(1, p / RT.target); }
+    if (RT.mode === "percent") {
+      if (RT.startPct == null || RT.maxPct == null) return null;
+      const span = RT.targetPct - RT.startPct;
+      return span <= 0 ? 1 : Math.min(1, Math.max(0, (RT.maxPct - RT.startPct) / span));
+    }
+    if (RT.mode === "chapters") {
+      if (RT.startSpine == null || RT.maxSpine == null) return null;
+      return Math.min(1, (RT.maxSpine - RT.startSpine) / RT.target);
+    }
+    return null;
+  }
+
+  // ---------- hooks called by the reader ----------
+  function rtOnProgress(loc) {
+    if (!RT.running || RT.ended) return;
+    loc = loc || rs.lastLocation;
+    if (!loc || !loc.start) return;
+    // the starting point is measured as soon as the book's locations are ready
+    if (RT.startPct == null && RT.startCfi) {
+      RT.startPct = rtPctOf(RT.startCfi);
+      if (RT.startPct != null && RT.mode === "percent") rtComputeTargetPct();
+    }
+    const pct = rtPctOf(loc.start.cfi);
+    if (pct != null) RT.maxPct = RT.maxPct == null ? pct : Math.max(RT.maxPct, pct);
+    const idx = typeof loc.start.index === "number" ? loc.start.index : null;
+    if (idx != null) {
+      if (RT.startSpine == null) RT.startSpine = idx;
+      RT.maxSpine = RT.maxSpine == null ? idx : Math.max(RT.maxSpine, idx);
+    }
+    rtCheck();
+  }
+  function rtComputeTargetPct() {
+    const x = RT.target / 100;
+    RT.targetPct = RT.pctKind === "reach" ? Math.min(1, x) : Math.min(1, (RT.startPct || 0) + x);
+  }
+
+  function rtCheck() {
+    if (!RT.running || RT.ended) return;
+    const f = rtFraction();
+    rtRenderBar(f);
+    if (!$("#reader-timer-panel").hidden) rtRenderRun();
+    let done = f != null && f >= 1;
+    // the last page of the book also ends a page / percent / chapter session
+    if (!done && RT.mode !== "time" && rs.lastLocation && rs.lastLocation.atEnd) done = true;
+    if (done) rtFinish();
+  }
+
+  // ---------- start / pause / stop ----------
+  function rtStart() {
+    if (!rs.rendition) return;
+    const c = rtCfg();
+    RT.mode = c.mode;
+    RT.target = Math.max(1, Number(c.amounts[c.mode]) || 1);
+    RT.pctKind = c.pctKind;
+    RT.running = true; RT.paused = false; RT.autoPaused = false; RT.ended = false;
+    RT.startedAt = Date.now(); RT.resumeAt = Date.now(); RT.elapsed = 0;
+    const loc = rs.lastLocation;
+    RT.startCfi = loc && loc.start ? loc.start.cfi : null;
+    RT.startPct = rtPctOf(RT.startCfi);
+    RT.maxPct = RT.startPct;
+    RT.startSpine = loc && loc.start && typeof loc.start.index === "number" ? loc.start.index : null;
+    RT.maxSpine = RT.startSpine;
+    if (RT.mode === "percent" && RT.startPct != null) rtComputeTargetPct();
+    clearInterval(RT.tick);
+    RT.tick = setInterval(rtCheck, 1000);
+    $("#rt-end").hidden = true;
+    $("#reader-timer-btn").classList.add("rt-running");
+    closeAllPanels();
+    rtRenderBar(0);
+    showHint("Séance lancée. Bonne lecture, je te préviens à la fin.");
+  }
+  function rtPause(auto) {
+    if (!RT.running || RT.paused) return;
+    RT.elapsed += Date.now() - RT.resumeAt;
+    RT.paused = true; RT.autoPaused = !!auto;
+    rtRenderRun();
+  }
+  function rtResume() {
+    if (!RT.running || !RT.paused) return;
+    RT.paused = false; RT.autoPaused = false; RT.resumeAt = Date.now();
+    rtRenderRun();
+  }
+  function rtStop() {
+    clearInterval(RT.tick);
+    RT.running = false; RT.paused = false; RT.ended = false;
+    $("#reader-timer-btn").classList.remove("rt-running");
+    $("#rt-bar").hidden = true;
+    $("#rt-end").hidden = true;
+    rtRenderPanel();
+  }
+  function rtFinish() {
+    if (RT.mode === "time") { RT.elapsed = RT.target * 60000; RT.resumeAt = Date.now(); RT.paused = true; }
+    else if (!RT.paused) { RT.elapsed += Date.now() - RT.resumeAt; RT.paused = true; }
+    RT.ended = true;
+    clearInterval(RT.tick);
+    rtRenderBar(1);
+    $("#reader-timer-btn").classList.remove("rt-running");
+    const atEnd = RT.mode !== "time" && rs.lastLocation && rs.lastLocation.atEnd && (rtFraction() || 0) < 1;
+    $("#rt-end-title").textContent = atEnd ? "Tu es arrivé à la fin du livre" : rtGoalText(true);
+    $("#rt-end-stats").textContent = rtStatsText();
+    const m = RT_MODES[RT.mode];
+    $("#rt-end-more").textContent = "+" + m.extra + " " + (RT.mode === "chapters" ? "chapitre" : m.unit);
+    $("#rt-end-more").hidden = !!atEnd;
+    closeAllPanels();
+    $("#rt-end").hidden = false;
+    if (rtCfg().sound) rtChime();
+  }
+  // "+5 min / +5 pages…": the same session goes on, the goal moves further
+  function rtExtend() {
+    const m = RT_MODES[RT.mode];
+    RT.target += m.extra;
+    if (RT.mode === "percent") RT.targetPct = Math.min(1, RT.targetPct + m.extra / 100);
+    RT.ended = false; RT.paused = false; RT.resumeAt = Date.now();
+    clearInterval(RT.tick);
+    RT.tick = setInterval(rtCheck, 1000);
+    $("#rt-end").hidden = true;
+    $("#reader-timer-btn").classList.add("rt-running");
+    rtCheck();
+  }
+
+  // ---------- texts ----------
+  function rtGoalText(done) {
+    const t = RT.target;
+    if (RT.mode === "time") return done ? t + " min de lecture" : "Lire pendant " + t + " min";
+    if (RT.mode === "pages") return done ? t + " pages lues" : "Lire " + t + " pages";
+    if (RT.mode === "percent") {
+      if (RT.pctKind === "reach") return done ? Math.round(RT.targetPct * 100) + " % du livre atteint" : "Aller jusqu'à " + t + " % du livre";
+      return done ? "+" + t + " % du livre" : "Avancer de " + t + " % dans le livre";
+    }
+    return done ? (t > 1 ? t + " chapitres lus" : "Chapitre terminé") : (t > 1 ? "Lire " + t + " chapitres" : "Finir ce chapitre");
+  }
+  function rtStatsText() {
+    const parts = ["Temps de lecture : " + rtFmtDur(rtElapsedMs())];
+    const p = rtPagesRead();
+    if (p != null && !(RT.ended && RT.mode === "pages")) parts.push(p + " page" + (p > 1 ? "s" : "") + " lue" + (p > 1 ? "s" : ""));
+    const cur = rtCurrentPct();
+    if (cur != null) parts.push("tu es à " + Math.round(cur * 100) + " % du livre");
+    return parts.join(" · ");
+  }
+
+  // ---------- rendering ----------
+  function rtRenderBar(f) {
+    const bar = $("#rt-bar");
+    if (!RT.running || !rtCfg().bar) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.firstElementChild.style.width = ((f == null ? 0 : f) * 100).toFixed(2) + "%";
+  }
+  function rtRenderPanel() {
+    const c = rtCfg();
+    const run = RT.running && !RT.ended;
+    $("#rt-setup").hidden = run;
+    $("#rt-run").hidden = !run;
+    if (run) { rtRenderRun(); return; }
+    const m = RT_MODES[c.mode];
+    document.querySelectorAll("#rt-mode-group button").forEach((b) => b.classList.toggle("active", b.dataset.rtmode === c.mode));
+    const presets = $("#rt-preset-group");
+    presets.innerHTML = "";
+    m.presets.forEach((v) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = v + (c.mode === "percent" ? " %" : "");
+      b.classList.toggle("active", Number(c.amounts[c.mode]) === v);
+      b.addEventListener("click", () => { rtSetAmount(v); });
+      presets.appendChild(b);
+    });
+    $("#rt-amount").value = c.amounts[c.mode];
+    $("#rt-amount").max = m.max;
+    $("#rt-unit").textContent = m.unit;
+    $("#rt-pctkind-row").hidden = c.mode !== "percent";
+    document.querySelectorAll("#rt-pctkind-group button").forEach((b) => b.classList.toggle("active", b.dataset.pctkind === c.pctKind));
+    $("#rt-bar-toggle").checked = !!c.bar;
+    $("#rt-sound-toggle").checked = !!c.sound;
+    $("#rt-autopause-toggle").checked = !!c.autoPause;
+    $("#rt-preview").textContent = rtPreview(c);
+  }
+  function rtPreview(c) {
+    const v = Number(c.amounts[c.mode]) || 0;
+    const L = rtLocs(), cur = rtCurrentPct();
+    if (c.mode === "time") return "Tu seras prévenu vers " + new Date(Date.now() + v * 60000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + ".";
+    if (c.mode === "pages") {
+      if (!L || cur == null) return "Calcul des pages du livre en cours…";
+      const end = Math.min(1, cur + v / L.length());
+      return "Arrivée prévue vers " + Math.round(end * 100) + " % du livre." + (bookMode() ? "" : " En mode classique, 1 page ≈ 1 000 signes.");
+    }
+    if (c.mode === "percent") {
+      if (cur == null) return "Calcul de la position en cours…";
+      if (c.pctKind === "reach") {
+        if (v / 100 <= cur) return "Attention : tu es déjà à " + Math.round(cur * 100) + " %. Choisis une valeur plus haute.";
+        return "Tu es à " + Math.round(cur * 100) + " %" + (L ? ", soit environ " + Math.round((v / 100 - cur) * L.length()) + " pages à lire." : ".");
+      }
+      return "De " + Math.round(cur * 100) + " % à " + Math.min(100, Math.round(cur * 100 + v)) + " %" + (L ? ", soit environ " + Math.round(Math.min(v / 100, 1 - cur) * L.length()) + " pages." : ".");
+    }
+    return v > 1 ? "La séance s'arrête au début du " + (v + 1) + "e chapitre à partir d'ici." : "La séance s'arrête au début du chapitre suivant.";
+  }
+  function rtRenderRun() {
+    if (!RT.running) return;
+    const f = rtFraction();
+    $("#rt-goal").textContent = rtGoalText(false);
+    $("#rt-meter-fill").style.width = ((f || 0) * 100).toFixed(1) + "%";
+    let left = "";
+    if (RT.mode === "time") left = "Reste " + rtFmtDur(Math.max(0, RT.target * 60000 - rtElapsedMs()));
+    else if (f == null) left = "Mesure en cours…";
+    else if (RT.mode === "pages") left = "Reste " + Math.max(0, RT.target - (rtPagesRead() || 0)) + " page(s)";
+    else if (RT.mode === "percent") left = "Reste " + Math.max(0, Math.round((RT.targetPct - (RT.maxPct || 0)) * 1000) / 10) + " %";
+    else left = "Reste " + Math.max(0, RT.target - (RT.maxSpine - RT.startSpine)) + " chapitre(s)";
+    $("#rt-left").textContent = (RT.paused ? "En pause · " : "") + left;
+    $("#rt-status").textContent = rtStatsText();
+    $("#rt-pause").textContent = RT.paused ? "Reprendre" : "Pause";
+    $("#rt-pause").hidden = RT.mode !== "time";
+  }
+
+  // gentle two-note chime (Web Audio, no file to download)
+  function rtChime() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = RT.audio || (RT.audio = new AC());
+      if (ctx.state === "suspended") ctx.resume();
+      [[659.25, 0], [880, 0.28], [1318.5, 0.56]].forEach(([freq, at]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = freq;
+        const t0 = ctx.currentTime + at;
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.12, t0 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.6);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t0); o.stop(t0 + 1.7);
+      });
+    } catch {}
+  }
+
+  function rtSetAmount(v) {
+    const c = rtCfg(), m = RT_MODES[c.mode];
+    v = Math.max(1, Math.min(m.max, Math.round(Number(v) || 1)));
+    c.amounts[c.mode] = v;
+    rtSaveCfg({ amounts: c.amounts });
+    rtRenderPanel();
+  }
+  function rtTogglePanel() {
+    if ($("#reader-modal").hidden || !rs.rendition) return;
+    rtRenderPanel();
+    togglePanel("#reader-timer-panel", "#reader-timer-btn");
+    if (RT.running) $("#reader-timer-btn").classList.add("rt-running");
+  }
+
+  // ---------- wiring ----------
+  $("#reader-timer-btn").addEventListener("click", rtTogglePanel);
+  document.querySelectorAll("#rt-mode-group button").forEach((b) => b.addEventListener("click", () => { rtSaveCfg({ mode: b.dataset.rtmode }); rtRenderPanel(); }));
+  document.querySelectorAll("#rt-pctkind-group button").forEach((b) => b.addEventListener("click", () => { rtSaveCfg({ pctKind: b.dataset.pctkind }); rtRenderPanel(); }));
+  $("#rt-minus").addEventListener("click", () => { const c = rtCfg(); rtSetAmount(Number(c.amounts[c.mode]) - RT_MODES[c.mode].step); });
+  $("#rt-plus").addEventListener("click", () => { const c = rtCfg(); rtSetAmount(Number(c.amounts[c.mode]) + RT_MODES[c.mode].step); });
+  $("#rt-amount").addEventListener("change", (e) => rtSetAmount(e.target.value));
+  $("#rt-amount").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") rtSetAmount(e.target.value); });
+  $("#rt-bar-toggle").addEventListener("change", (e) => { rtSaveCfg({ bar: e.target.checked }); rtRenderBar(rtFraction()); });
+  $("#rt-sound-toggle").addEventListener("change", (e) => rtSaveCfg({ sound: e.target.checked }));
+  $("#rt-autopause-toggle").addEventListener("change", (e) => rtSaveCfg({ autoPause: e.target.checked }));
+  $("#rt-start").addEventListener("click", () => {
+    const c = rtCfg(), cur = rtCurrentPct();
+    if (c.mode === "percent" && c.pctKind === "reach" && cur != null && c.amounts.percent / 100 <= cur) { rtRenderPanel(); return; }
+    // unlock audio on this click so the end chime can play later
+    if (c.sound) { try { const AC = window.AudioContext || window.webkitAudioContext; if (AC && !RT.audio) RT.audio = new AC(); } catch {} }
+    rtStart();
+  });
+  $("#rt-pause").addEventListener("click", () => { if (RT.paused) rtResume(); else rtPause(false); });
+  $("#rt-stop").addEventListener("click", () => { rtStop(); closeAllPanels(); showHint("Séance arrêtée."); });
+  $("#rt-end-finish").addEventListener("click", () => { rtStop(); });
+  $("#rt-end-more").addEventListener("click", rtExtend);
+  $("#rt-end-close").addEventListener("click", () => { rtStop(); closeReader(); });
+  document.addEventListener("visibilitychange", () => {
+    if (!RT.running || RT.ended || RT.mode !== "time" || !rtCfg().autoPause) return;
+    if (document.hidden) rtPause(true);
+    else if (RT.autoPaused) { rtResume(); showHint("Séance reprise."); }
   });
 
   refreshSettingsUI();

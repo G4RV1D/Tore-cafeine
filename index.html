@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,600&family=Poiret+One&family=EB+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Josefin+Sans:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7" />
+<link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
 
@@ -506,6 +506,7 @@
 <!-- E-reader — reads EPUB files in the browser, with Kindle-style comfort settings -->
 <div id="reader-modal" class="reader-overlay" hidden>
   <div class="reader-frame">
+    <div id="rt-bar" class="rt-bar" hidden><span></span></div>
     <header class="reader-topbar">
       <button class="reader-icon-btn" id="reader-close" type="button" title="Fermer la lecture">&times;</button>
       <div class="reader-title-group">
@@ -516,6 +517,7 @@
         <button class="reader-icon-btn" id="reader-toc-btn" type="button" title="Table des matières">☰</button>
         <button class="reader-icon-btn" id="reader-bookmark-btn" type="button" title="Marquer cette page">☆</button>
         <button class="reader-icon-btn" id="reader-bookmarks-list-btn" type="button" title="Mes marque-pages">🔖</button>
+        <button class="reader-icon-btn" id="reader-timer-btn" type="button" title="Séance de lecture (touche T)">⏱</button>
         <button class="reader-icon-btn" id="reader-fullscreen-btn" type="button" title="Plein écran (touche F)">⛶</button>
         <button class="reader-icon-btn" id="reader-settings-btn" type="button" title="Réglages de lecture">Aa</button>
         <a id="reader-download" class="reader-icon-btn" href="#" download title="Télécharger l'ebook">⭳</a>
@@ -683,12 +685,86 @@
       <div id="reader-bookmarks-list" class="reader-bookmarks-list"></div>
       <p id="reader-bookmarks-empty" class="d-fine">Aucun marque-page pour ce livre pour l'instant. Clique sur l'étoile ☆ en haut pour en ajouter un ici.</p>
     </div>
+
+    <!-- Séance de lecture — minuteur sans montre -->
+    <div id="reader-timer-panel" class="reader-panel" hidden>
+      <div class="reader-panel-head">
+        <h4>Séance de lecture</h4>
+        <button class="reader-icon-btn" type="button" data-panel-close>&times;</button>
+      </div>
+      <div id="rt-setup">
+        <p class="rt-intro">Fixe un objectif et oublie la montre : rien ne s'affiche pendant la lecture, un message doux t'avertit à la fin.</p>
+        <div class="reader-setting-row reader-setting-row-col">
+          <label>Objectif</label>
+          <div class="reader-chip-group" id="rt-mode-group">
+            <button type="button" data-rtmode="time">Durée</button>
+            <button type="button" data-rtmode="pages">Pages</button>
+            <button type="button" data-rtmode="percent">Pourcentage</button>
+            <button type="button" data-rtmode="chapters">Chapitres</button>
+          </div>
+        </div>
+        <div class="reader-setting-row reader-setting-row-col" id="rt-pctkind-row" hidden>
+          <div class="reader-chip-group" id="rt-pctkind-group">
+            <button type="button" data-pctkind="gain">Avancer de…</button>
+            <button type="button" data-pctkind="reach">Aller jusqu'à…</button>
+          </div>
+        </div>
+        <div class="reader-setting-row reader-setting-row-col">
+          <div class="reader-chip-group" id="rt-preset-group"></div>
+          <div class="rt-amount">
+            <button type="button" id="rt-minus" aria-label="Moins">−</button>
+            <input type="number" id="rt-amount" min="1" step="1" inputmode="numeric" />
+            <span id="rt-unit">min</span>
+            <button type="button" id="rt-plus" aria-label="Plus">+</button>
+          </div>
+          <p id="rt-preview" class="rt-preview"></p>
+        </div>
+        <div class="reader-setting-row">
+          <label for="rt-bar-toggle">Barre de progression discrète</label>
+          <label class="reader-switch"><input type="checkbox" id="rt-bar-toggle" /><span></span></label>
+        </div>
+        <div class="reader-setting-row">
+          <label for="rt-sound-toggle">Son doux à la fin</label>
+          <label class="reader-switch"><input type="checkbox" id="rt-sound-toggle" /><span></span></label>
+        </div>
+        <div class="reader-setting-row">
+          <label for="rt-autopause-toggle">Pause si je quitte l'onglet (mode Durée)</label>
+          <label class="reader-switch"><input type="checkbox" id="rt-autopause-toggle" /><span></span></label>
+        </div>
+        <button type="button" id="rt-start" class="rt-btn rt-btn-main">Lancer la séance</button>
+      </div>
+      <div id="rt-run" hidden>
+        <p id="rt-goal" class="rt-goal"></p>
+        <div class="rt-meter"><span id="rt-meter-fill"></span></div>
+        <p id="rt-left" class="rt-left"></p>
+        <p id="rt-status" class="rt-preview"></p>
+        <div class="rt-actions">
+          <button type="button" id="rt-pause" class="rt-btn">Pause</button>
+          <button type="button" id="rt-stop" class="rt-btn rt-btn-ghost">Arrêter</button>
+        </div>
+        <p class="d-fine">Le décompte ne s'affiche qu'ici, quand tu ouvres ce panneau.</p>
+      </div>
+    </div>
+
+    <!-- Fin de séance -->
+    <div id="rt-end" class="rt-end" hidden>
+      <div class="rt-end-card">
+        <p class="rt-end-kicker">Séance terminée</p>
+        <p id="rt-end-title" class="rt-end-title"></p>
+        <p id="rt-end-stats" class="rt-end-stats"></p>
+        <div class="rt-end-actions">
+          <button type="button" id="rt-end-finish" class="rt-btn rt-btn-main">Finir ma page</button>
+          <button type="button" id="rt-end-more" class="rt-btn">+5 min</button>
+          <button type="button" id="rt-end-close" class="rt-btn rt-btn-ghost">Refermer le livre</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
